@@ -23,47 +23,37 @@ export function renderOutput(container: HTMLElement, results: EvalResult[]) {
         div.textContent = r.formatted || '';
         break;
 
+      case 'funcdef':
+        div.className = 'out-line out-comment';
+        div.style.color = 'var(--accent2)';
+        div.textContent = r.formatted || '';
+        break;
+
       case 'assign': {
-        const nameSpan = document.createElement('span');
-        nameSpan.className = 'out-assign';
-        nameSpan.textContent = `${r.varName} = `;
-        div.appendChild(nameSpan);
+        if (r.formatted === undefined) break; // suppressed with ;
 
-        if (r.formatted !== undefined) {
-          // Try KaTeX for matrices
-          const katexStr = valueToKatex(r.varName!, r.value);
-          if (katexStr) {
-            const mathDiv = document.createElement('div');
-            mathDiv.style.margin = '4px 0';
-            try {
-              katex.render(katexStr, mathDiv, { throwOnError: false, displayMode: true });
-              div.innerHTML = '';
-              div.appendChild(mathDiv);
-            } catch {
-              const valSpan = document.createElement('span');
-              valSpan.className = 'out-result';
-              valSpan.textContent = r.formatted;
-              div.appendChild(valSpan);
-            }
-          } else {
-            const valSpan = document.createElement('span');
-            valSpan.className = 'out-result';
-            valSpan.textContent = r.formatted;
-            div.appendChild(valSpan);
+        // Try KaTeX rendering
+        const katexStr = valueToKatex(r.varName!, r.value);
+        if (katexStr) {
+          const mathDiv = document.createElement('div');
+          mathDiv.style.margin = '4px 0';
+          try {
+            katex.render(katexStr, mathDiv, { throwOnError: false, displayMode: true });
+            div.appendChild(mathDiv);
+          } catch {
+            div.innerHTML = `<span class="out-assign">${r.varName} = </span><span class="out-result">${toMatlabStr(r.value)}</span>`;
           }
+        } else {
+          div.innerHTML = `<span class="out-assign">${r.varName} = </span><span class="out-result">${toMatlabStr(r.value)}</span>`;
         }
         break;
       }
 
-      case 'expr': {
+      case 'expr':
         if (r.formatted) {
-          const valSpan = document.createElement('span');
-          valSpan.className = 'out-result';
-          valSpan.textContent = r.formatted;
-          div.appendChild(valSpan);
+          div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
         }
         break;
-      }
 
       case 'error':
         div.className = 'out-line out-error';
@@ -75,70 +65,137 @@ export function renderOutput(container: HTMLElement, results: EvalResult[]) {
   }
 }
 
+// ── Format value as MATLAB string (not [[],[]]) ──
+function toMatlabStr(val: any): string {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'function') return '[function]';
+  if (typeof val === 'boolean') return val ? 'true' : 'false';
+  if (typeof val === 'number') {
+    if (Number.isInteger(val) && Math.abs(val) < 1e9) return val.toString();
+    if (Math.abs(val) < 1e-10) return '0';
+    if (Math.abs(val) > 1e6 || Math.abs(val) < 1e-4) return val.toExponential(4);
+    return parseFloat(val.toPrecision(6)).toString();
+  }
+
+  // Matrix → MATLAB format [row1; row2; row3]
+  try {
+    const arr = toArray2D(val);
+    if (arr) {
+      const rows = arr.map(row => row.map(v => fmtNum(v)).join(', '));
+      return '[' + rows.join('; ') + ']';
+    }
+  } catch {}
+
+  // Array
+  if (Array.isArray(val)) {
+    return '[' + val.map(v => typeof v === 'number' ? fmtNum(v) : toMatlabStr(v)).join(', ') + ']';
+  }
+
+  // Object (eigs result etc)
+  if (typeof val === 'object' && val !== null) {
+    if (val.values) return `eigenvalues: [${Array.from(val.values).map((v: any) => fmtNum(v)).join(', ')}]`;
+    try { return math.format(val, { precision: 6 }); } catch {}
+  }
+
+  return String(val);
+}
+
+function fmtNum(v: any): string {
+  if (typeof v !== 'number') return String(v);
+  if (Number.isInteger(v) && Math.abs(v) < 1e8) return v.toString();
+  if (Math.abs(v) < 1e-10) return '0';
+  if (Math.abs(v) >= 1e5 || Math.abs(v) < 1e-3) return v.toExponential(4);
+  return parseFloat(v.toPrecision(6)).toString();
+}
+
+// ── Convert math.js value to 2D array ──
+function toArray2D(val: any): number[][] | null {
+  try {
+    if (val && typeof val.toArray === 'function') {
+      const arr = val.toArray();
+      if (Array.isArray(arr) && arr.length > 0) {
+        if (Array.isArray(arr[0])) return arr as number[][];
+        // 1D array → column vector
+        return arr.map((v: any) => [v]) as number[][];
+      }
+    }
+    if (Array.isArray(val) && val.length > 0) {
+      if (Array.isArray(val[0])) return val as number[][];
+      return val.map((v: any) => [v]) as number[][];
+    }
+  } catch {}
+  return null;
+}
+
+// ── KaTeX rendering ──
 function valueToKatex(name: string, val: any): string | null {
   if (val === undefined || val === null) return null;
+  if (typeof val === 'function') return null;
 
   // Scalar
   if (typeof val === 'number') {
-    const formatted = formatNum(val);
-    return `${escName(name)} = ${formatted}`;
+    return `${escName(name)} = ${formatKNum(val)}`;
   }
 
-  // String (symbolic result)
+  // String (symbolic)
   if (typeof val === 'string') {
-    return `${escName(name)} = ${val.replace(/\*/g, '\\cdot ')}`;
+    // Clean up symbolic output for KaTeX
+    let tex = val.replace(/\*/g, ' \\cdot ').replace(/\^(\d+)/g, '^{$1}');
+    return `${escName(name)} = ${tex}`;
   }
 
-  // Matrix
-  try {
-    const size = math.size(val) as number[];
-    if (size.length === 2) {
-      const rows = size[0], cols = size[1];
-      if (rows > 12 || cols > 12) return null; // too big for KaTeX
-      const arr = math.matrix(val).toArray() as number[][];
-      let tex = `${escName(name)}_{${rows}\\times${cols}} = \\begin{bmatrix}`;
-      for (let i = 0; i < Math.min(rows, 8); i++) {
-        const rowVals = arr[i].slice(0, Math.min(cols, 8)).map(v => formatNum(v));
-        if (cols > 8) rowVals.push('\\cdots');
-        tex += rowVals.join(' & ');
-        if (i < Math.min(rows, 8) - 1) tex += ' \\\\ ';
-      }
-      if (rows > 8) tex += ' \\\\ \\vdots';
-      tex += '\\end{bmatrix}';
-      return tex;
+  // Matrix / Vector
+  const arr = toArray2D(val);
+  if (arr) {
+    const rows = arr.length, cols = arr[0].length;
+    if (rows > 12 || cols > 12) return null; // too big
+
+    let tex = `${escName(name)}`;
+    if (rows > 1 || cols > 1) tex += `_{${rows}\\times${cols}}`;
+    tex += ` = \\begin{bmatrix}`;
+
+    for (let i = 0; i < Math.min(rows, 8); i++) {
+      const rowVals = arr[i].slice(0, Math.min(cols, 8)).map(v => formatKNum(v));
+      if (cols > 8) rowVals.push('\\cdots');
+      tex += rowVals.join(' & ');
+      if (i < Math.min(rows, 8) - 1) tex += ' \\\\ ';
     }
-    if (size.length === 1) {
-      const arr = (val as any).toArray ? (val as any).toArray() : val;
-      if (Array.isArray(arr) && arr.length <= 12) {
-        const vals = arr.map((v: any) => formatNum(v));
-        return `${escName(name)}_{${arr.length}\\times 1} = \\begin{bmatrix}${vals.join(' \\\\ ')}\\end{bmatrix}`;
-      }
-    }
-  } catch {}
+    if (rows > 8) tex += ' \\\\ \\vdots';
+    tex += '\\end{bmatrix}';
+    return tex;
+  }
+
+  // Object with values (eigs)
+  if (typeof val === 'object' && val.values) {
+    try {
+      const vals = Array.from(val.values).map((v: any) => formatKNum(v));
+      return `\\lambda = \\begin{bmatrix}${vals.join(' \\\\ ')}\\end{bmatrix}`;
+    } catch {}
+  }
 
   return null;
 }
 
 function escName(name: string): string {
-  // Convert underscores to subscripts
   const parts = name.split('_');
-  if (parts.length === 1) return name;
-  return `${parts[0]}_{${parts.slice(1).join('\\_')}}`;
+  if (parts.length === 1) return name.length > 1 ? `\\text{${name}}` : name;
+  return `${parts[0]}_{${parts.slice(1).join('')}}`;
 }
 
-function formatNum(val: any): string {
+function formatKNum(val: any): string {
   if (typeof val !== 'number') return String(val);
   if (Number.isInteger(val) && Math.abs(val) < 1e8) return val.toString();
   if (Math.abs(val) < 1e-10) return '0';
   if (Math.abs(val) >= 1e5) {
     const exp = Math.floor(Math.log10(Math.abs(val)));
-    const mantissa = (val / Math.pow(10, exp)).toFixed(4);
-    return `${mantissa} \\times 10^{${exp}}`;
+    const man = (val / Math.pow(10, exp)).toFixed(4);
+    return `${man} \\times 10^{${exp}}`;
   }
   if (Math.abs(val) < 1e-3) {
     const exp = Math.floor(Math.log10(Math.abs(val)));
-    const mantissa = (val / Math.pow(10, exp)).toFixed(4);
-    return `${mantissa} \\times 10^{${exp}}`;
+    const man = (val / Math.pow(10, exp)).toFixed(4);
+    return `${man} \\times 10^{${exp}}`;
   }
   return parseFloat(val.toPrecision(6)).toString();
 }
