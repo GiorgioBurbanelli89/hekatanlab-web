@@ -173,6 +173,23 @@ body {
   gap: 15px;
 }
 
+/* ── Light theme ── */
+body.light {
+  --bg: #f5f5f5;
+  --bg-panel: #e8e8e8;
+  --bg-editor: #ffffff;
+  --text: #222;
+  --text-dim: #666;
+  --accent: #0066cc;
+  --accent2: #008800;
+  --border: #ccc;
+  --error: #cc0000;
+  --comment: #888;
+}
+
+body.light .katex { color: #222; }
+body.light .katex .mord { color: #222; }
+
 /* ── Responsive ── */
 @media (max-width: 700px) {
   #main { flex-direction: column; }
