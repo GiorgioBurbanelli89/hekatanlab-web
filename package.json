@@ -1,0 +1,20 @@
+{
+  "name": "hekatanlab-web",
+  "version": "1.0.0",
+  "description": "HékatanLab Web — MATLAB-like calculator in the browser (math.js + C++/WASM)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4700",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "mathjs": "^13.0.0",
+    "katex": "^0.16.0",
+    "nerdamer": "^1.1.13"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "typescript": "^5.5.0"
+  }
+}
