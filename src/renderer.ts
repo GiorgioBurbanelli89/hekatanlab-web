@@ -2,6 +2,7 @@ import katex from 'katex';
 import * as math from 'mathjs';
 import type { EvalResult } from './engine';
 import { renderPlot } from './plotter';
+import { ViewCommand, renderStructure } from './viewer3d';
 
 export function renderOutput(container: HTMLElement, results: EvalResult[]) {
   container.innerHTML = '';
@@ -58,8 +59,13 @@ export function renderOutput(container: HTMLElement, results: EvalResult[]) {
 
       case 'plot': {
         try {
-          const canvas = renderPlot(r.value);
-          div.appendChild(canvas);
+          if (r.value instanceof ViewCommand) {
+            const viewer = renderStructure(r.value.data);
+            div.appendChild(viewer);
+          } else {
+            const plotEl = renderPlot(r.value);
+            div.appendChild(plotEl);
+          }
         } catch (e: any) {
           div.className = 'out-line out-error';
           div.textContent = `Plot error: ${e.message}`;

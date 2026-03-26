@@ -1,5 +1,7 @@
 import * as math from 'mathjs';
 import { PlotCommand } from './plotter';
+import { ViewCommand } from './viewer3d';
+import { k_truss2d, k_frame2d, k_frame3d, T2d, T3d, assemble, k_cst, k_q4 } from './fem';
 // @ts-ignore
 import nerdamer from 'nerdamer';
 // @ts-ignore
@@ -303,6 +305,79 @@ export function createEngine() {
     });
   }
 
+  function loadFemFunctions(p: any) {
+    // Stiffness matrices
+    p.set('k_truss2d', (E: number, A: number, L: number) => k_truss2d(E, A, L));
+    p.set('k_frame2d', (E: number, A: number, I: number, L: number) => k_frame2d(E, A, I, L));
+    p.set('k_frame3d', (E: number, G: number, A: number, Iy: number, Iz: number, J: number, L: number) =>
+      k_frame3d(E, G, A, Iy, Iz, J, L));
+    p.set('k_cst', (E: number, nu: number, t: number,
+      x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) =>
+      k_cst(E, nu, t, x1, y1, x2, y2, x3, y3));
+    p.set('k_q4', (E: number, nu: number, t: number, coords: any) => {
+      let c = coords;
+      if (c && typeof c.toArray === 'function') c = c.toArray();
+      return k_q4(E, nu, t, c);
+    });
+
+    // Transformation matrices
+    p.set('T2d', (theta: number) => T2d(theta));
+    p.set('T3d', (dx: number, dy: number, dz: number, vx: number, vy: number, vz: number) =>
+      T3d(dx, dy, dz, vx || 0, vy || 0, vz || 1));
+
+    // Assembly
+    p.set('assemble', (Kg: any, Ke: any, dofs: any) => {
+      let d = dofs;
+      if (d && typeof d.toArray === 'function') d = d.toArray();
+      if (Array.isArray(d) && Array.isArray(d[0])) d = d.flat();
+      return assemble(Kg, Ke, d.map(Number));
+    });
+
+    // Visualization
+    p.set('show3d', (...args: any[]) => {
+      const nodes = toArray2DArg(args[0]);
+      const elements = toArray2DArg(args[1]);
+      return new ViewCommand({
+        type: 'mesh', nodes, elements,
+        title: args[2] as string || undefined,
+        supports: args[3] ? toNumArray(args[3]).map(Math.round) : undefined,
+        loads: args[4] ? toArray2DArg(args[4]) : undefined
+      });
+    });
+
+    p.set('show_deformed', (...args: any[]) => {
+      const nodes = toArray2DArg(args[0]);
+      const elements = toArray2DArg(args[1]);
+      const U = toNumArray(args[2]);
+      const scale = typeof args[3] === 'number' ? args[3] : 1;
+      const dofPerNode = typeof args[4] === 'number' ? args[4] : 3;
+      return new ViewCommand({
+        type: 'deformed', nodes, elements, U, scale, dofPerNode,
+        title: args[5] as string || 'Deformed shape'
+      });
+    });
+
+    p.set('show_contour', (...args: any[]) => {
+      const nodes = toArray2DArg(args[0]);
+      const elements = toArray2DArg(args[1]);
+      const values = toNumArray(args[2]);
+      return new ViewCommand({
+        type: 'contour', nodes, elements, values,
+        title: args[3] as string || 'Contour'
+      });
+    });
+  }
+
+  function toArray2DArg(v: any): number[][] {
+    if (v && typeof v.toArray === 'function') v = v.toArray();
+    if (v && v._data) v = v._data;
+    if (Array.isArray(v)) {
+      if (v.length > 0 && Array.isArray(v[0])) return v.map((r: any) => r.map(Number));
+      return v.map((x: any) => [Number(x)]);
+    }
+    return [];
+  }
+
   function evaluate(code: string): EvalResult[] {
     // 1. Parse function definitions
     const { functions: codeFunctions, cleanCode } = parseMatlabFunctions(code);
@@ -311,6 +386,7 @@ export function createEngine() {
     parser = math.parser();
     loadNerdamer(parser);
     loadPlotFunctions(parser);
+    loadFemFunctions(parser);
 
     // 3. Register all functions (from code + localStorage)
     userFunctions = new Map([...codeFunctions]);
@@ -370,6 +446,8 @@ export function createEngine() {
       'subset','index','concat','sort','resize','kron',
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
+      'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
+      'show3d','show_deformed','show_contour',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',
@@ -437,18 +515,24 @@ export function createEngine() {
       try {
         const result = parser.evaluate(expr);
 
-        // Check if result is a PlotCommand
+        // Check if result is a PlotCommand or ViewCommand
         if (result instanceof PlotCommand) {
           results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
+          continue;
+        }
+        if (result instanceof ViewCommand) {
+          results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result });
           continue;
         }
 
         const assignMatch = expr.match(/^([a-zA-Z_]\w*)\s*=/);
         if (assignMatch) {
           knownVars.add(assignMatch[1]);
-          // Check if assigned value is a PlotCommand
+          // Check if assigned value is a PlotCommand or ViewCommand
           if (result instanceof PlotCommand) {
             results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
+          } else if (result instanceof ViewCommand) {
+            results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result });
           } else {
             results.push({
               line: startLine + 1, input: rawText, type: 'assign',
