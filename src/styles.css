@@ -59,6 +59,12 @@ body {
   border-color: var(--accent);
 }
 
+#header button.active {
+  background: #0a3a1a;
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+
 #header button.primary {
   background: #0a4a2a;
   border-color: var(--accent2);

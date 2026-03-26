@@ -22,7 +22,8 @@ document.body.innerHTML = `
     ${templateOptions}
   </select>
   <button id="btn-funcs">📚</button>
-  <button id="btn-theme">☀</button>
+  <button id="btn-autorun" class="active" title="Autorun ON/OFF">⚡</button>
+  <button id="btn-theme" title="Claro/Oscuro">☀</button>
   <button id="btn-help">?</button>
 </div>
 <div id="main">
@@ -60,11 +61,20 @@ editor.addEventListener('keydown', (e) => {
   }
 });
 
-// Autorun
+// Autorun (toggleable)
+let autorunEnabled = true;
 let timer: number | null = null;
 editor.addEventListener('input', () => {
+  if (!autorunEnabled) return;
   if (timer) clearTimeout(timer);
   timer = window.setTimeout(run, 400);
+});
+
+document.getElementById('btn-autorun')!.addEventListener('click', () => {
+  autorunEnabled = !autorunEnabled;
+  const btn = document.getElementById('btn-autorun')!;
+  btn.classList.toggle('active', autorunEnabled);
+  btn.title = autorunEnabled ? 'Autorun ON' : 'Autorun OFF';
 });
 
 function run() {
