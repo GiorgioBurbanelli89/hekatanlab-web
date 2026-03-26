@@ -4,12 +4,14 @@ import type { EvalResult } from './engine';
 import { renderPlot } from './plotter';
 import { ViewCommand, renderStructure } from './viewer3d';
 
-export function renderOutput(container: HTMLElement, results: EvalResult[]) {
+export function renderOutput(container: HTMLElement, results: EvalResult[], editor?: HTMLTextAreaElement) {
   container.innerHTML = '';
 
   for (const r of results) {
     const div = document.createElement('div');
     div.className = 'out-line';
+    // data-line for output→code navigation
+    if (r.line) div.setAttribute('data-line', String(r.line));
 
     switch (r.type) {
       case 'blank':
@@ -80,6 +82,34 @@ export function renderOutput(container: HTMLElement, results: EvalResult[]) {
     }
 
     container.appendChild(div);
+  }
+
+  // Click handler: output → code navigation
+  if (editor) {
+    container.onclick = (e) => {
+      const target = (e.target as HTMLElement).closest('[data-line]') as HTMLElement | null;
+      if (!target) return;
+      const lineNum = parseInt(target.getAttribute('data-line') || '0');
+      if (!lineNum) return;
+
+      // Scroll editor to that line and highlight
+      const lines = editor.value.split('\n');
+      let pos = 0;
+      for (let i = 0; i < lineNum - 1 && i < lines.length; i++) {
+        pos += lines[i].length + 1;
+      }
+      const endPos = pos + (lines[lineNum - 1]?.length || 0);
+      editor.focus();
+      editor.setSelectionRange(pos, endPos);
+
+      // Scroll into view
+      const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 18;
+      editor.scrollTop = (lineNum - 3) * lineHeight;
+
+      // Flash highlight on the output element
+      target.classList.add('line-highlight-flash');
+      setTimeout(() => target.classList.remove('line-highlight-flash'), 600);
+    };
   }
 }
 

@@ -82,7 +82,7 @@ function run() {
   const t0 = performance.now();
   const results = engine.evaluate(code);
   const dt = (performance.now() - t0).toFixed(0);
-  renderOutput(output, results);
+  renderOutput(output, results, editor);
   (document.getElementById('status-lines')!).textContent = `${code.split('\n').length} líneas`;
   (document.getElementById('status-time')!).textContent = `${dt}ms`;
   (document.getElementById('status-vars')!).textContent = `${results.filter(r => r.type === 'assign').length} vars`;

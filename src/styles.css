@@ -196,6 +196,16 @@ body.light {
 body.light .katex { color: #222; }
 body.light .katex .mord { color: #222; }
 
+/* ── Output → Code navigation (data-line) ── */
+[data-line] { position: relative; }
+[data-line]:hover { cursor: pointer; background: rgba(68,136,204,0.06); }
+[data-line]:hover::before {
+  content: '\2190'; position: absolute; left: -1.4em; top: 50%;
+  transform: translateY(-50%); color: var(--accent); font-size: 14px; opacity: 1;
+}
+.line-highlight-flash { animation: flashLine 0.6s ease-out; }
+@keyframes flashLine { 0% { background: rgba(68,136,204,0.3); } 100% { background: transparent; } }
+
 /* ── Responsive ── */
 @media (max-width: 700px) {
   #main { flex-direction: column; }
