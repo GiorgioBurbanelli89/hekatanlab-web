@@ -429,6 +429,32 @@ export function createEngine() {
     loadPlotFunctions(parser);
     loadFemFunctions(parser);
 
+    // _idx: MATLAB-style 1-based indexing that works for vectors and matrices
+    parser.set('_idx', (...args: any[]) => {
+      const M = args[0];
+      if (args.length === 2) {
+        // Single index: v(i) — works for 1D arrays and Nx1/1xN matrices
+        const i = Math.round(Number(args[1])) - 1;
+        try { return math.subset(M, math.index(i)); } catch {}
+        try { return math.subset(M, math.index(i, 0)); } catch {}
+        try { return math.subset(M, math.index(0, i)); } catch {}
+        // Flat array fallback
+        const arr = (typeof M.toArray === 'function') ? M.toArray() : M;
+        if (Array.isArray(arr)) {
+          const flat = arr.flat(Infinity);
+          return flat[i];
+        }
+        throw new Error(`Cannot index into value`);
+      }
+      if (args.length === 3) {
+        // Two indices: M(i,j)
+        const i = Math.round(Number(args[1])) - 1;
+        const j = Math.round(Number(args[2])) - 1;
+        return math.subset(M, math.index(i, j));
+      }
+      throw new Error(`_idx requires 1 or 2 indices`);
+    });
+
     // 3. Register all functions (from code + localStorage)
     userFunctions = new Map([...codeFunctions]);
     const storedFns = loadFunctions();
@@ -440,7 +466,7 @@ export function createEngine() {
     }
 
     // 4. Pre-process: join multi-line matrices (lines with unmatched [ ... ])
-    const rawLines = cleanCode.split('\n');
+    const rawLines = cleanCode.replace(/\r/g, '').split('\n');
     const joined: { text: string; startLine: number }[] = [];
     let accum = '';
     let accumStart = 0;
@@ -488,7 +514,7 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
-      'show3d','show_deformed','show_contour','submat','subvec','fullvec',
+      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',
@@ -525,6 +551,18 @@ export function createEngine() {
       }
 
       let expr = trimmed;
+      // Strip inline comments: E = 200e3  % this is a comment
+      // But don't strip % inside strings "..."
+      const pctIdx = expr.indexOf('%');
+      if (pctIdx > 0) {
+        // Check if % is inside a string
+        const before = expr.substring(0, pctIdx);
+        const dqCount = (before.match(/"/g) || []).length;
+        const sqCount = (before.match(/'/g) || []).length;
+        if (dqCount % 2 === 0 && sqCount % 2 === 0) {
+          expr = expr.substring(0, pctIdx).trim();
+        }
+      }
       const suppress = expr.endsWith(';');
       if (suppress) expr = expr.slice(0, -1).trim();
 
@@ -542,15 +580,15 @@ export function createEngine() {
       // A \ b → inv(A) * b  (basic)
       expr = expr.replace(/(\w+)\s*\\\s*(\w+)/g, 'inv($1) * $2');
 
-      // MATLAB indexing: M(i,j) → subset(M, index(i-1,j-1)), v(i) → subset(v, index(i-1))
+      // MATLAB indexing: M(i,j) → _idx(M,i,j), v(i) → _idx(v,i)
       // Only for known variables, not built-in functions
       expr = expr.replace(/\b([a-zA-Z_]\w*)\s*\(([^)]+)\)/g, (match, name, args) => {
         if (builtinFuncs.has(name)) return match;
         if (userFunctions.has(name)) return match;
         if (!knownVars.has(name)) return match;
-        // It's a known variable — convert to subset indexing (1-based → 0-based)
-        const indices = args.split(',').map((a: string) => `(${a.trim()})-1`);
-        return `subset(${name}, index(${indices.join(', ')}))`;
+        // It's a known variable — convert to _idx helper (handles vectors & matrices)
+        const indices = args.split(',').map((a: string) => a.trim());
+        return `_idx(${name}, ${indices.join(', ')})`;
       });
 
       try {
