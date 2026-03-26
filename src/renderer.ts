@@ -1,6 +1,7 @@
 import katex from 'katex';
 import * as math from 'mathjs';
 import type { EvalResult } from './engine';
+import { renderPlot } from './plotter';
 
 export function renderOutput(container: HTMLElement, results: EvalResult[]) {
   container.innerHTML = '';
@@ -54,6 +55,17 @@ export function renderOutput(container: HTMLElement, results: EvalResult[]) {
           div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
         }
         break;
+
+      case 'plot': {
+        try {
+          const canvas = renderPlot(r.value);
+          div.appendChild(canvas);
+        } catch (e: any) {
+          div.className = 'out-line out-error';
+          div.textContent = `Plot error: ${e.message}`;
+        }
+        break;
+      }
 
       case 'error':
         div.className = 'out-line out-error';
@@ -112,17 +124,40 @@ function fmtNum(v: any): string {
 // ── Convert math.js value to 2D array ──
 function toArray2D(val: any): number[][] | null {
   try {
+    // math.js Matrix → toArray()
     if (val && typeof val.toArray === 'function') {
       const arr = val.toArray();
       if (Array.isArray(arr) && arr.length > 0) {
         if (Array.isArray(arr[0])) return arr as number[][];
-        // 1D array → column vector
         return arr.map((v: any) => [v]) as number[][];
       }
     }
+    // Plain JS array
     if (Array.isArray(val) && val.length > 0) {
       if (Array.isArray(val[0])) return val as number[][];
       return val.map((v: any) => [v]) as number[][];
+    }
+    // math.js DenseMatrix/SparseMatrix — try valueOf() or _data
+    if (val && val._data) {
+      const data = val._data;
+      if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data[0])) return data as number[][];
+        return data.map((v: any) => [v]) as number[][];
+      }
+    }
+    // Last resort: use math.js to get size and extract
+    if (val && typeof val === 'object') {
+      try {
+        const size = math.size(val);
+        const s = (size as any).valueOf ? (size as any).valueOf() : size;
+        if (Array.isArray(s) && s.length >= 1) {
+          const arr = (typeof val.valueOf === 'function') ? val.valueOf() : val;
+          if (Array.isArray(arr)) {
+            if (s.length === 1) return arr.map((v: any) => [typeof v === 'number' ? v : Number(v)]);
+            if (s.length === 2 && Array.isArray(arr[0])) return arr;
+          }
+        }
+      } catch {}
     }
   } catch {}
   return null;
@@ -149,10 +184,13 @@ function valueToKatex(name: string, val: any): string | null {
   const arr = toArray2D(val);
   if (arr) {
     const rows = arr.length, cols = arr[0].length;
-    if (rows > 12 || cols > 12) return null; // too big
 
-    let tex = `${escName(name)}`;
-    if (rows > 1 || cols > 1) tex += `_{${rows}\\times${cols}}`;
+    // Large arrays → compact summary
+    if (rows > 12 || cols > 12) {
+      return `${escNameWithSize(name, rows, cols)} = [${rows}\\times${cols} \\text{ matrix}]`;
+    }
+
+    let tex = escNameWithSize(name, rows, cols);
     tex += ` = \\begin{bmatrix}`;
 
     for (let i = 0; i < Math.min(rows, 8); i++) {
@@ -164,6 +202,17 @@ function valueToKatex(name: string, val: any): string | null {
     if (rows > 8) tex += ' \\\\ \\vdots';
     tex += '\\end{bmatrix}';
     return tex;
+  }
+
+  // 1D array (not matrix) — compact for large
+  if (Array.isArray(val) || (val && typeof val.toArray === 'function')) {
+    let flat: number[];
+    try {
+      flat = Array.isArray(val) ? val.flat(Infinity) : val.toArray().flat(Infinity);
+    } catch { return null; }
+    if (flat.length > 12) {
+      return `${escName(name)} = [1\\times${flat.length} \\text{ vector}]`;
+    }
   }
 
   // Object with values (eigs)
@@ -180,7 +229,22 @@ function valueToKatex(name: string, val: any): string | null {
 function escName(name: string): string {
   const parts = name.split('_');
   if (parts.length === 1) return name.length > 1 ? `\\text{${name}}` : name;
-  return `${parts[0]}_{${parts.slice(1).join('')}}`;
+  return `${parts[0]}_{\\text{${parts.slice(1).join('\\_')}}}`;
+}
+
+function escNameWithSize(name: string, rows: number, cols: number): string {
+  const parts = name.split('_');
+  const dimStr = (rows > 1 || cols > 1) ? `${rows}\\times${cols}` : '';
+  if (parts.length === 1) {
+    const base = name.length > 1 ? `\\text{${name}}` : name;
+    return dimStr ? `${base}_{${dimStr}}` : base;
+  }
+  // Combine subscript text + dimensions in one subscript
+  const sub = parts.slice(1).join('\\_');
+  if (dimStr) {
+    return `${parts[0]}_{\\text{${sub}},\\,${dimStr}}`;
+  }
+  return `${parts[0]}_{\\text{${sub}}}`;
 }
 
 function formatKNum(val: any): string {

@@ -1,9 +1,18 @@
 import * as math from 'mathjs';
+import { PlotCommand } from './plotter';
+// @ts-ignore
+import nerdamer from 'nerdamer';
+// @ts-ignore
+import 'nerdamer/Algebra.js';
+// @ts-ignore
+import 'nerdamer/Calculus.js';
+// @ts-ignore
+import 'nerdamer/Solve.js';
 
 export interface EvalResult {
   line: number;
   input: string;
-  type: 'comment' | 'blank' | 'assign' | 'expr' | 'error' | 'separator' | 'heading' | 'funcdef';
+  type: 'comment' | 'blank' | 'assign' | 'expr' | 'error' | 'separator' | 'heading' | 'funcdef' | 'plot';
   varName?: string;
   value?: any;
   formatted?: string;
@@ -134,27 +143,164 @@ export function createEngine() {
 
   function loadNerdamer(p: any) {
     try {
-      const nerdamer = (window as any).nerdamer;
-      if (!nerdamer) return;
+      const nerd = nerdamer || (window as any).nerdamer;
+      if (!nerd) { console.warn('nerdamer not loaded'); return; }
       const symFuncs: Record<string, (...args: any[]) => string> = {
-        sdiff: (expr: string, v: string) => nerdamer.diff(nerdamer(expr), v).toString(),
-        sdiff2: (expr: string, v: string) => nerdamer.diff(nerdamer.diff(nerdamer(expr), v), v).toString(),
-        sint: (expr: string, v: string) => nerdamer.integrate(nerdamer(expr), v).toString(),
+        sdiff: (expr: string, v: string) => nerd.diff(nerd(expr), v).toString(),
+        sdiff2: (expr: string, v: string) => nerd.diff(nerd.diff(nerd(expr), v), v).toString(),
+        sint: (expr: string, v: string) => nerd.integrate(nerd(expr), v).toString(),
         sdefint: (expr: string, v: string, a: number, b: number) => {
-          const F = nerdamer.integrate(nerdamer(expr), v);
-          const Fb = nerdamer(F.toString()).evaluate({ [v]: b });
-          const Fa = nerdamer(F.toString()).evaluate({ [v]: a });
-          return nerdamer.subtract(Fb, Fa).text('decimals');
+          const F = nerd.integrate(nerd(expr), v);
+          const Fb = nerd(F.toString()).evaluate({ [v]: b });
+          const Fa = nerd(F.toString()).evaluate({ [v]: a });
+          // nerdamer.subtract may not exist in all versions; use nerd('Fb - Fa')
+          try {
+            return nerd.subtract(Fb, Fa).text('decimals');
+          } catch {
+            return nerd(`(${Fb.text('decimals')})-(${Fa.text('decimals')})`).evaluate().text('decimals');
+          }
         },
-        ssolve: (expr: string, v: string) => nerdamer.solve(expr, v).toString(),
-        sexpand: (expr: string) => nerdamer(expr).expand().toString(),
-        sfactor: (expr: string) => nerdamer.factor(nerdamer(expr)).toString(),
-        ssimplify: (expr: string) => nerdamer(expr).toString(),
+        ssolve: (expr: string, v: string) => nerd.solve(expr, v).toString(),
+        sexpand: (expr: string) => nerd(expr).expand().toString(),
+        sfactor: (expr: string) => nerd.factor(nerd(expr)).toString(),
+        ssimplify: (expr: string) => nerd(expr).toString(),
       };
       for (const [name, fn] of Object.entries(symFuncs)) {
         p.set(name, fn);
       }
-    } catch {}
+    } catch (e) { console.warn('nerdamer registration failed:', e); }
+  }
+
+  function toNumArray(v: any): number[] {
+    if (Array.isArray(v)) return v.flat(Infinity).map(Number);
+    if (v && typeof v.toArray === 'function') return v.toArray().flat(Infinity).map(Number);
+    if (v && v._data) return v._data.flat(Infinity).map(Number);
+    return [];
+  }
+
+  function loadPlotFunctions(p: any) {
+    // plot(x, y) or plot(y) — line chart
+    p.set('plot', (...args: any[]) => {
+      if (args.length >= 2) {
+        return new PlotCommand({ type: 'line', x: toNumArray(args[0]), y: toNumArray(args[1]),
+          title: args[2] as string || undefined });
+      }
+      const y = toNumArray(args[0]);
+      return new PlotCommand({ type: 'line', x: y.map((_, i) => i + 1), y, title: args[1] as string || undefined });
+    });
+
+    // scatter(x, y)
+    p.set('scatter', (...args: any[]) => {
+      if (args.length >= 2) {
+        return new PlotCommand({ type: 'scatter', x: toNumArray(args[0]), y: toNumArray(args[1]),
+          title: args[2] as string || undefined });
+      }
+      const y = toNumArray(args[0]);
+      return new PlotCommand({ type: 'scatter', x: y.map((_, i) => i + 1), y, title: args[1] as string || undefined });
+    });
+
+    // bar(x, y) or bar(y)
+    p.set('bar', (...args: any[]) => {
+      if (args.length >= 2) {
+        return new PlotCommand({ type: 'bar', x: toNumArray(args[0]), y: toNumArray(args[1]),
+          title: args[2] as string || undefined });
+      }
+      const y = toNumArray(args[0]);
+      return new PlotCommand({ type: 'bar', x: y.map((_, i) => i + 1), y, title: args[1] as string || undefined });
+    });
+
+    // stem(x, y)
+    p.set('stem', (...args: any[]) => {
+      if (args.length >= 2) {
+        return new PlotCommand({ type: 'stem', x: toNumArray(args[0]), y: toNumArray(args[1]),
+          title: args[2] as string || undefined });
+      }
+      const y = toNumArray(args[0]);
+      return new PlotCommand({ type: 'stem', x: y.map((_, i) => i + 1), y, title: args[1] as string || undefined });
+    });
+
+    // hist(data, nBins)
+    p.set('hist', (...args: any[]) => {
+      const data = toNumArray(args[0]);
+      const nBins = (typeof args[1] === 'number') ? args[1] : 10;
+      const mn = Math.min(...data), mx = Math.max(...data);
+      const binW = (mx - mn) / nBins || 1;
+      const edges: number[] = [];
+      const counts: number[] = [];
+      for (let i = 0; i <= nBins; i++) edges.push(mn + i * binW);
+      for (let i = 0; i < nBins; i++) counts.push(0);
+      for (const v of data) {
+        let bin = Math.floor((v - mn) / binW);
+        if (bin >= nBins) bin = nBins - 1;
+        if (bin < 0) bin = 0;
+        counts[bin]++;
+      }
+      return new PlotCommand({ type: 'hist', x: edges, y: counts,
+        title: args[2] as string || undefined });
+    });
+
+    // plot3(x, y, z) — 3D line
+    p.set('plot3', (...args: any[]) => {
+      return new PlotCommand({ type: 'line3d',
+        x: toNumArray(args[0]), y: toNumArray(args[1]), z: toNumArray(args[2]),
+        title: args[3] as string || undefined });
+    });
+
+    // surf(X, Y, Z) — surface plot (Z is matrix)
+    p.set('surf', (...args: any[]) => {
+      const xg = toNumArray(args[0]);
+      const yg = toNumArray(args[1]);
+      // Z is a matrix (2D array)
+      let zArr: any = args[2];
+      let zGrid: number[][] = [];
+      if (zArr && typeof zArr.toArray === 'function') zArr = zArr.toArray();
+      if (zArr && zArr._data) zArr = zArr._data;
+      if (Array.isArray(zArr) && Array.isArray(zArr[0])) {
+        zGrid = zArr.map((row: any[]) => row.map(Number));
+      }
+      return new PlotCommand({ type: 'surf', x: [], y: [],
+        xGrid: xg, yGrid: yg, zGrid,
+        title: args[3] as string || undefined });
+    });
+
+    // meshz(xg, yg, expr) — generate Z grid for surf: expr uses x,y
+    p.set('meshz', (...args: any[]) => {
+      const xg = toNumArray(args[0]);
+      const yg = toNumArray(args[1]);
+      const expr = String(args[2]);
+      const Z: number[][] = [];
+      for (let i = 0; i < xg.length; i++) {
+        const row: number[] = [];
+        for (let j = 0; j < yg.length; j++) {
+          try {
+            row.push(math.evaluate(expr, { x: xg[i], y: yg[j] }));
+          } catch { row.push(0); }
+        }
+        Z.push(row);
+      }
+      return Z;
+    });
+
+    // fplot(fn, [a, b]) — plot a math expression string over a range
+    p.set('fplot', (...args: any[]) => {
+      const expr = String(args[0]);
+      let a = -10, b = 10;
+      if (args[1]) {
+        const range = toNumArray(args[1]);
+        if (range.length >= 2) { a = range[0]; b = range[1]; }
+      }
+      const n = 200;
+      const xs: number[] = [], ys: number[] = [];
+      for (let i = 0; i <= n; i++) {
+        const xv = a + (b - a) * i / n;
+        xs.push(xv);
+        try {
+          ys.push(math.evaluate(expr, { x: xv }));
+        } catch { ys.push(NaN); }
+      }
+      return new PlotCommand({ type: 'line', x: xs, y: ys,
+        title: args[2] as string || expr, xlabel: 'x' });
+    });
   }
 
   function evaluate(code: string): EvalResult[] {
@@ -164,6 +310,7 @@ export function createEngine() {
     // 2. Reset parser
     parser = math.parser();
     loadNerdamer(parser);
+    loadPlotFunctions(parser);
 
     // 3. Register all functions (from code + localStorage)
     userFunctions = new Map([...codeFunctions]);
@@ -175,26 +322,85 @@ export function createEngine() {
       registerFunction(fn, parser);
     }
 
-    // 4. Evaluate clean code line by line
-    const lines = cleanCode.split('\n');
+    // 4. Pre-process: join multi-line matrices (lines with unmatched [ ... ])
+    const rawLines = cleanCode.split('\n');
+    const joined: { text: string; startLine: number }[] = [];
+    let accum = '';
+    let accumStart = 0;
+    let bracketDepth = 0;
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const trimmed = rawLines[i].trim();
+
+      // Pass through comments and blanks even inside accumulation
+      if (bracketDepth === 0 && (trimmed === '' || trimmed.startsWith('%'))) {
+        joined.push({ text: rawLines[i], startLine: i });
+        continue;
+      }
+
+      if (bracketDepth === 0) {
+        accum = trimmed;
+        accumStart = i;
+      } else {
+        accum += ' ' + trimmed;
+      }
+
+      // Count brackets
+      for (const ch of trimmed) {
+        if (ch === '[') bracketDepth++;
+        else if (ch === ']') bracketDepth--;
+      }
+
+      if (bracketDepth <= 0) {
+        bracketDepth = 0;
+        joined.push({ text: accum, startLine: accumStart });
+        accum = '';
+      }
+    }
+    if (accum) joined.push({ text: accum, startLine: rawLines.length - 1 });
+
+    // 5. Track known variables for indexing disambiguation
+    const knownVars = new Set<string>();
+    // Built-in math.js functions that should NOT be treated as indexing
+    const builtinFuncs = new Set([
+      'sin','cos','tan','asin','acos','atan','atan2','sqrt','abs','exp','log','log2','log10',
+      'ceil','floor','round','sign','min','max','mean','sum','prod','std','variance',
+      'inv','det','transpose','trace','eigs','norm','cross','dot','diag','size','length',
+      'zeros','ones','identity','eye','range','linspace','reshape','flatten','squeeze',
+      'subset','index','concat','sort','resize','kron',
+      'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
+      'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
+      'random','factorial','permutations','combinations','gcd','lcm',
+      'mod','pow','nthRoot','cbrt','square','cube',
+      'complex','re','im','conj','arg',
+      'format','print','typeof','typeOf','number','string','boolean','bignumber','fraction',
+      'matrix','sparse','unit','createUnit',
+      'parse','evaluate','compile','simplify','rationalize','derivative',
+      'add','subtract','multiply','divide','dotMultiply','dotDivide','dotPow',
+      'equal','unequal','smaller','larger','smallerEq','largerEq',
+      'and','or','not','xor',
+      'map','filter','forEach','partitionSelect',
+      'lup','lusolve','lsolve','usolve','qr','slu',
+    ]);
+
+    // 5. Evaluate joined lines
     const results: EvalResult[] = [];
 
-    for (let i = 0; i < lines.length; i++) {
-      const raw = lines[i];
-      const trimmed = raw.trim();
+    for (const { text: rawText, startLine } of joined) {
+      const trimmed = rawText.trim();
 
       if (trimmed === '') {
-        results.push({ line: i + 1, input: raw, type: 'blank' });
+        results.push({ line: startLine + 1, input: rawText, type: 'blank' });
         continue;
       }
 
       if (trimmed.startsWith('%')) {
         if (trimmed.startsWith('% ═') || trimmed.startsWith('% ───') || trimmed.startsWith('% ---')) {
-          results.push({ line: i + 1, input: raw, type: 'separator' });
+          results.push({ line: startLine + 1, input: rawText, type: 'separator' });
         } else if (trimmed.includes('function') && trimmed.includes('defined')) {
-          results.push({ line: i + 1, input: raw, type: 'funcdef', formatted: trimmed.substring(2) });
+          results.push({ line: startLine + 1, input: rawText, type: 'funcdef', formatted: trimmed.substring(2) });
         } else {
-          results.push({ line: i + 1, input: raw, type: 'comment', formatted: trimmed.substring(1).trim() });
+          results.push({ line: startLine + 1, input: rawText, type: 'comment', formatted: trimmed.substring(1).trim() });
         }
         continue;
       }
@@ -205,34 +411,60 @@ export function createEngine() {
 
       // Skip 'end' keyword (leftover from functions)
       if (expr === 'end' || expr === 'endfunction' || expr === 'clc' || expr === 'clear' || expr === 'clear all') {
-        results.push({ line: i + 1, input: raw, type: 'comment', formatted: expr });
+        results.push({ line: startLine + 1, input: rawText, type: 'comment', formatted: expr });
         continue;
       }
 
       // MATLAB → math.js compatibility
-      // A' → transpose(A)
+      // Convert single-quoted strings to double-quoted for math.js: 'text' → "text"
+      expr = expr.replace(/'([^']*?)'/g, '"$1"');
+      // A' → transpose(A) — but NOT inside strings
       expr = expr.replace(/(\w+)'/g, 'transpose($1)');
       // A \ b → inv(A) * b  (basic)
       expr = expr.replace(/(\w+)\s*\\\s*(\w+)/g, 'inv($1) * $2');
 
+      // MATLAB indexing: M(i,j) → subset(M, index(i-1,j-1)), v(i) → subset(v, index(i-1))
+      // Only for known variables, not built-in functions
+      expr = expr.replace(/\b([a-zA-Z_]\w*)\s*\(([^)]+)\)/g, (match, name, args) => {
+        if (builtinFuncs.has(name)) return match;
+        if (userFunctions.has(name)) return match;
+        if (!knownVars.has(name)) return match;
+        // It's a known variable — convert to subset indexing (1-based → 0-based)
+        const indices = args.split(',').map((a: string) => `(${a.trim()})-1`);
+        return `subset(${name}, index(${indices.join(', ')}))`;
+      });
+
       try {
         const result = parser.evaluate(expr);
+
+        // Check if result is a PlotCommand
+        if (result instanceof PlotCommand) {
+          results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
+          continue;
+        }
+
         const assignMatch = expr.match(/^([a-zA-Z_]\w*)\s*=/);
         if (assignMatch) {
-          results.push({
-            line: i + 1, input: raw, type: 'assign',
-            varName: assignMatch[1], value: result,
-            formatted: suppress ? undefined : formatValue(result),
-          });
+          knownVars.add(assignMatch[1]);
+          // Check if assigned value is a PlotCommand
+          if (result instanceof PlotCommand) {
+            results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
+          } else {
+            results.push({
+              line: startLine + 1, input: rawText, type: 'assign',
+              varName: assignMatch[1], value: result,
+              formatted: suppress ? undefined : formatValue(result),
+            });
+          }
         } else {
           results.push({
-            line: i + 1, input: raw, type: 'expr',
+            line: startLine + 1, input: rawText, type: 'expr',
             value: result,
             formatted: suppress ? undefined : formatValue(result),
           });
         }
       } catch (e: any) {
-        results.push({ line: i + 1, input: raw, type: 'error', error: e.message });
+        results.push({ line: startLine + 1, input: rawText, type: 'error', error: e.message });
       }
     }
 

@@ -380,4 +380,64 @@ coseno = cos(rad)
 x = log(100)
 y = log2(256)
 z = exp(1)` },
+
+  // ── Gráficas 2D ──
+  { name: 'Gráficas 2D', category: 'Plotting', code: `% ═══════════════════════════════════════════
+% Gráficas 2D — plot, scatter, bar, stem
+% ═══════════════════════════════════════════
+
+% Función seno
+x = range(0, 6.28, 0.1)
+y = map(x, sin)
+plot(x, y, "sin(x)")
+
+% Scatter
+xs = [1, 2, 3, 4, 5, 6, 7, 8]
+ys = [2.1, 3.9, 6.2, 7.8, 10.1, 12.3, 13.9, 16.2]
+scatter(xs, ys, "Datos experimentales")
+
+% Bar chart
+categorias = [1, 2, 3, 4, 5]
+valores = [23, 45, 12, 67, 34]
+bar(categorias, valores, "Ventas por región")
+
+% Stem plot
+n = range(0, 20, 1)
+impulso = map(n, f(t) = sin(t) * exp(-t/5))
+stem(n, impulso, "Señal amortiguada")` },
+
+  // ── Gráficas 3D ──
+  { name: 'Gráficas 3D', category: 'Plotting', code: `% ═══════════════════════════════════════════
+% Gráficas 3D — plot3, surf
+% ═══════════════════════════════════════════
+
+% Curva 3D: hélice
+t = range(0, 6.28*3, 0.1)
+xh = map(t, cos)
+yh = map(t, sin)
+plot3(xh, yh, t, "Hélice 3D")
+
+% Superficie: z = sin(r)/r (sombrero mexicano)
+xg = range(-4, 4, 0.5)
+yg = range(-4, 4, 0.5)
+Z = meshz(xg, yg, "sin(sqrt(x^2+y^2+0.01))/sqrt(x^2+y^2+0.01)")
+surf(xg, yg, Z, "Sombrero mexicano")` },
+
+  // ── fplot ──
+  { name: 'Gráficas de funciones', category: 'Plotting', code: `% ═══════════════════════════════════════════
+% fplot — graficar expresión directamente
+% ═══════════════════════════════════════════
+
+% Polinomio
+fplot("x^3 - 3*x^2 + 2", [-2, 4], "x³ - 3x² + 2")
+
+% Trigonométrica
+fplot("sin(x) * cos(2*x)", [0, 6.28], "sin(x)·cos(2x)")
+
+% Exponencial
+fplot("exp(-x/3) * sin(2*x)", [0, 15], "Oscilación amortiguada")
+
+% Histograma de datos aleatorios
+datos = map(range(1, 500, 1), f(i) = random(-3, 3) + random(-3, 3))
+hist(datos, 20, "Distribución (suma de uniformes)")` },
 ];
