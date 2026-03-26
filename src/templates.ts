@@ -440,4 +440,239 @@ fplot("exp(-x/3) * sin(2*x)", [0, 15], "Oscilación amortiguada")
 % Histograma de datos aleatorios
 datos = map(range(1, 500, 1), f(i) = random(-3, 3) + random(-3, 3))
 hist(datos, 20, "Distribución (suma de uniformes)")` },
+
+  // ══════════════════════════════════════
+  // FEM — Validación
+  // ══════════════════════════════════════
+
+  { name: 'FEM — Truss 2D (3 barras)', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Truss 2D — 3 barras, validación manual
+% ═══════════════════════════════════════════
+
+% Propiedades
+E = 200e3;  % MPa
+A = 0.01;   % m²
+
+% Nodos (x, y, z)
+nds = [0,0,0; 4,0,0; 2,0,3]
+
+% Elementos [nodo_i, nodo_j]
+els = [1,3; 2,3; 1,2]
+
+% Visualizar estructura
+show3d(nds, els, "Truss 2D — 3 barras", [1,2])
+
+% Longitudes
+L1 = sqrt((2-0)^2 + (3-0)^2)
+L2 = sqrt((2-4)^2 + (3-0)^2)
+L3 = 4
+
+% Ángulos (rad)
+th1 = atan2(3, 2)
+th2 = atan2(3, -2)
+th3 = 0
+
+% K local → K global para truss 2D
+% k_global = T' * k_local * T
+% DOFs: [u1,v1, u2,v2] por elemento
+
+% Elemento 1: nodo 1→3, DOFs [1,2,5,6]
+c1 = cos(th1); s1 = sin(th1)
+k1 = E*A/L1
+T1 = [c1,s1,0,0; -s1,c1,0,0; 0,0,c1,s1; 0,0,-s1,c1]
+Kl1 = k1 * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
+Kg1 = transpose(T1) * Kl1 * T1
+
+% Elemento 2: nodo 2→3, DOFs [3,4,5,6]
+c2 = cos(th2); s2 = sin(th2)
+k2 = E*A/L2
+T2 = [c2,s2,0,0; -s2,c2,0,0; 0,0,c2,s2; 0,0,-s2,c2]
+Kl2 = k2 * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
+Kg2 = transpose(T2) * Kl2 * T2
+
+% Elemento 3: nodo 1→2, DOFs [1,2,3,4]
+k3 = E*A/L3
+Kg3 = k3 * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
+
+% Ensamblaje K global (6×6)
+K = zeros(6,6);
+K = assemble(K, Kg1, [1,2,5,6]);
+K = assemble(K, Kg2, [3,4,5,6]);
+K = assemble(K, Kg3, [1,2,3,4])
+
+% Carga: F3y = -100 kN (nodo 3, DOF 6)
+F = [0; 0; 0; 0; 0; -100]
+
+% Condiciones de borde: nodos 1,2 fijos → DOFs 1,2,3,4
+free = [5, 6]
+Kr = submat(K, free)
+Fr = subvec(F, free)
+
+% Resolver
+Ur = inv(Kr) * Fr
+
+% Desplazamientos completos
+U = fullvec(Ur, free, 6)
+
+% Mostrar deformada (escala 500x)
+show_deformed(nds, els, U, 500, 2, "Deformada (500x)")` },
+
+  { name: 'FEM — Pórtico 2D', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Pórtico 2D — Frame con carga lateral
+% ═══════════════════════════════════════════
+
+% Propiedades
+E = 200e3;  % MPa
+A = 0.04;   % m²
+I = 5e-4;   % m⁴
+
+% Nodos
+nds = [0,0,0; 6,0,0; 6,0,4; 0,0,4]
+
+% Elementos
+els = [1,2; 2,3; 3,4]
+
+show3d(nds, els, "Pórtico 2D", [1,4])
+
+% K frame 2D local (6×6)
+% DOFs: [u, w, θ] por nodo (en plano XZ)
+
+% Elemento 1 (viga): nodo 1→2, L=6, horizontal
+Ke1 = k_frame2d(E, A, I, 6)
+
+% Elemento 2 (columna): nodo 2→3, L=4, vertical (θ=90°)
+Ke2 = k_frame2d(E, A, I, 4)
+Te2 = T2d(pi/2)
+Kg2 = transpose(Te2) * Ke2 * Te2
+
+% Elemento 3 (columna): nodo 3→4, L=4, vertical hacia abajo...
+% nodo 4 a nodo 3: dx=6,dz=-4 → ángulo
+% Mejor: nodo 3→4: dx=-6, dz=0 → horizontal invertido
+% Corregir: el pórtico es 1(base-izq)→4(base-der) con 2,3 arriba
+% Redefinir:
+% nds = [0,0,0; 0,0,4; 6,0,4; 6,0,0] — recorrido antihorario
+% els = [1,2; 2,3; 3,4]
+% El 1: col izq (vertical), El 2: viga (horizontal), El 3: col der (vertical)
+
+% K global 12 DOFs (3 por nodo × 4 nodos)
+K = zeros(12,12);
+
+% Col izq: nodo 1→2, L=4, θ=90°
+Kc = k_frame2d(E, A, I, 4)
+Tc = T2d(pi/2)
+Kc_g = transpose(Tc) * Kc * Tc
+K = assemble(K, Kc_g, [1,2,3,4,5,6])
+
+% Viga: nodo 2→3, L=6, θ=0
+Kv = k_frame2d(E, A, I, 6)
+K = assemble(K, Kv, [4,5,6,7,8,9])
+
+% Col der: nodo 3→4, L=4, θ=-90°
+Kc2_g = transpose(T2d(-pi/2)) * Kc * T2d(-pi/2)
+K = assemble(K, Kc2_g, [7,8,9,10,11,12])
+
+% Carga lateral: Fx=50 kN en nodo 2
+F = zeros(12,1);
+F(4) = 50
+
+% BC: nodos 1,4 empotrados → DOFs 1,2,3,10,11,12 = 0
+% DOFs libres: 4,5,6,7,8,9
+free = [4,5,6,7,8,9]
+nds2 = [0,0,0; 0,0,4; 6,0,4; 6,0,0]
+els2 = [1,2; 2,3; 3,4]
+
+Kr = submat(K, free)
+Fr = subvec(F, free)
+Ur = inv(Kr) * Fr
+U = fullvec(Ur, free, 12)
+
+% Deformada
+show_deformed(nds2, els2, U, 200, 3, "Deformada (200x)")` },
+
+  { name: 'FEM — Nave industrial 3D', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Nave industrial 3D — Pórtico de acero
+% ═══════════════════════════════════════════
+
+% Dimensiones
+Lx = 12;   % luz (m)
+Ly = 6;    % separación pórticos (m)
+H = 5;     % altura columnas (m)
+Hp = 7;    % altura cumbrera (m)
+
+% Nodos (2 pórticos)
+nds = [
+  0, 0, 0;
+  Lx, 0, 0;
+  0, 0, H;
+  Lx, 0, H;
+  Lx/2, 0, Hp;
+  0, Ly, 0;
+  Lx, Ly, 0;
+  0, Ly, H;
+  Lx, Ly, H;
+  Lx/2, Ly, Hp
+]
+
+% Elementos (columnas + vigas inclinadas + correas)
+els = [
+  1,3;   % col izq pórtico 1
+  2,4;   % col der pórtico 1
+  3,5;   % viga izq pórtico 1
+  4,5;   % viga der pórtico 1
+  6,8;   % col izq pórtico 2
+  7,9;   % col der pórtico 2
+  8,10;  % viga izq pórtico 2
+  9,10;  % viga der pórtico 2
+  3,8;   % correa izq
+  4,9;   % correa der
+  5,10   % correa cumbrera
+]
+
+show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
+
+  { name: 'FEM — Placa CST', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Placa con 2 triángulos CST — Plane stress
+% Ejemplo 9.1 (Chandrupatla)
+% ═══════════════════════════════════════════
+
+% Material
+E = 30e6;    % psi
+nu = 0.25;
+t = 1;       % thickness
+
+% Nodos
+nds = [0,0,0; 2,0,0; 2,1,0; 0,1,0]
+
+% Elementos (2 triángulos)
+els = [1,2,3; 1,3,4]
+
+show3d(nds, els, "Placa CST (2 triángulos)", [1,4])
+
+% K elemento 1: nodos 1,2,3
+K1 = k_cst(E, nu, t, 0,0, 2,0, 2,1)
+
+% K elemento 2: nodos 1,3,4
+K2 = k_cst(E, nu, t, 0,0, 2,1, 0,1)
+
+% Ensamblar (8 DOFs: u1,v1,u2,v2,u3,v3,u4,v4)
+K = zeros(8,8);
+K = assemble(K, K1, [1,2,3,4,5,6])
+K = assemble(K, K2, [1,2,5,6,7,8])
+
+% Cargas: tracción en borde derecho
+% Nodos 2,3: Fx = 1000 lb (distribuida)
+F = zeros(8,1);
+F(3) = 500;   % u2
+F(5) = 500;   % u3
+
+% BC: nodo 1 fijo (u1=v1=0), nodo 4: u4=0 (roller)
+% DOFs libres: 3,4,5,6,8 (nodo 1 fijo, nodo 4 roller)
+free = [3,4,5,6,8]
+Kr = submat(K, free)
+Fr = subvec(F, free)
+Ur = inv(Kr) * Fr
+U = fullvec(Ur, free, 8)
+
+% Deformada
+show_deformed(nds, els, U, 5e4, 2, "Deformada CST (50000x)")` },
 ];

@@ -357,6 +357,47 @@ export function createEngine() {
       });
     });
 
+    // submat(K, dofs) — extract submatrix at given DOF indices (1-based)
+    p.set('submat', (M: any, dofs: any) => {
+      let d = dofs;
+      if (d && typeof d.toArray === 'function') d = d.toArray();
+      if (Array.isArray(d) && Array.isArray(d[0])) d = d.flat();
+      d = d.map(Number);
+      const m = (typeof M.toArray === 'function') ? M.toArray() : M;
+      const n = d.length;
+      const sub: number[][] = [];
+      for (let i = 0; i < n; i++) {
+        const row: number[] = [];
+        for (let j = 0; j < n; j++) {
+          row.push(m[d[i]-1][d[j]-1]);
+        }
+        sub.push(row);
+      }
+      return math.matrix(sub);
+    });
+
+    // subvec(F, dofs) — extract subvector at given DOF indices (1-based)
+    p.set('subvec', (V: any, dofs: any) => {
+      let d = dofs;
+      if (d && typeof d.toArray === 'function') d = d.toArray();
+      if (Array.isArray(d) && Array.isArray(d[0])) d = d.flat();
+      d = d.map(Number);
+      const v = (typeof V.toArray === 'function') ? V.toArray().flat() : Array.isArray(V) ? V.flat() : V;
+      return math.matrix(d.map((i: number) => [v[i-1]]));
+    });
+
+    // fullvec(Ur, free_dofs, n_total) — expand reduced solution to full vector
+    p.set('fullvec', (Ur: any, freeDofs: any, nTotal: number) => {
+      let d = freeDofs;
+      if (d && typeof d.toArray === 'function') d = d.toArray();
+      if (Array.isArray(d) && Array.isArray(d[0])) d = d.flat();
+      d = d.map(Number);
+      const ur = (typeof Ur.toArray === 'function') ? Ur.toArray().flat() : Array.isArray(Ur) ? Ur.flat() : [];
+      const full = new Array(nTotal).fill(0);
+      for (let i = 0; i < d.length; i++) full[d[i]-1] = ur[i];
+      return math.matrix(full.map(v => [v]));
+    });
+
     p.set('show_contour', (...args: any[]) => {
       const nodes = toArray2DArg(args[0]);
       const elements = toArray2DArg(args[1]);
@@ -447,7 +488,7 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
-      'show3d','show_deformed','show_contour',
+      'show3d','show_deformed','show_contour','submat','subvec','fullvec',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',
