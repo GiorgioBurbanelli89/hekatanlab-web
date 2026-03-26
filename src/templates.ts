@@ -539,4 +539,63 @@ Uf = fullvec(Ur, free, 8)
 
 % Deformada
 show_deformed(nds, els, Uf, 5e4, 2, "Deformada CST (50000x)")` },
+
+  { name: 'Control de flujo', category: 'Basico', code: `% For, while, if-else
+% Sumatoria con for
+suma = 0
+for i = range(1, 10, 1)
+  suma = suma + i
+end
+suma
+
+% Factorial con while
+n = 7
+fact = 1
+k = 1
+while k <= n
+  fact = fact * k
+  k = k + 1
+end
+fact
+
+% if-elseif-else
+x = 42
+if x > 100
+  clase = "grande"
+elseif x > 10
+  clase = "mediano"
+else
+  clase = "pequeno"
+end
+clase` },
+
+  { name: 'FEM — Ensamblaje con for', category: 'FEM', code: `% Ensamblaje automatico con for loop
+% 5 resortes en serie
+nElem = 5
+nDof = nElem + 1
+ks = [100, 200, 150, 300, 250]
+
+% Ensamblar K global con for
+Kg = zeros(nDof, nDof)
+for e = range(1, nElem, 1)
+  ke = ks(e)
+  dof1 = e
+  dof2 = e + 1
+  Kg(dof1, dof1) = Kg(dof1, dof1) + ke
+  Kg(dof1, dof2) = Kg(dof1, dof2) - ke
+  Kg(dof2, dof1) = Kg(dof2, dof1) - ke
+  Kg(dof2, dof2) = Kg(dof2, dof2) + ke
+end
+Kg
+
+% Carga en nodo 3
+Fv = zeros(nDof, 1)
+Fv(3) = 100
+
+% BC: nodo 1 y 6 fijos
+free = [2, 3, 4, 5]
+Kr = submat(Kg, free)
+Fr = subvec(Fv, free)
+Ur = inv(Kr) * Fr
+Uf = fullvec(Ur, free, nDof)` },
 ];

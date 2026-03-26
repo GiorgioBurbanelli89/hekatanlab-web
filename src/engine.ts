@@ -502,7 +502,117 @@ export function createEngine() {
     }
     if (accum) joined.push({ text: accum, startLine: rawLines.length - 1 });
 
-    // 5. Track known variables for indexing disambiguation
+    // 5. Parse control flow blocks (for/while/if-elseif-else-end)
+    type Stmt = { kind: 'line'; text: string; startLine: number }
+      | { kind: 'for'; varName: string; range: string; body: Stmt[]; startLine: number }
+      | { kind: 'while'; cond: string; body: Stmt[]; startLine: number }
+      | { kind: 'if'; branches: { cond: string; body: Stmt[] }[]; elseBody?: Stmt[]; startLine: number };
+
+    function parseBlocks(lines: { text: string; startLine: number }[]): Stmt[] {
+      const stmts: Stmt[] = [];
+      let i = 0;
+      while (i < lines.length) {
+        const trimmed = lines[i].text.trim();
+        const startLine = lines[i].startLine;
+
+        // Strip inline comment for keyword detection
+        let kw = trimmed;
+        const pci = kw.indexOf('%');
+        if (pci > 0) kw = kw.substring(0, pci).trim();
+
+        // for var = range
+        const forMatch = kw.match(/^for\s+([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+        if (forMatch) {
+          i++;
+          const { body, endIdx } = collectBody(lines, i);
+          stmts.push({ kind: 'for', varName: forMatch[1], range: forMatch[2], body: parseBlocks(body), startLine });
+          i = endIdx + 1;
+          continue;
+        }
+
+        // while condition
+        const whileMatch = kw.match(/^while\s+(.+)$/);
+        if (whileMatch) {
+          i++;
+          const { body, endIdx } = collectBody(lines, i);
+          stmts.push({ kind: 'while', cond: whileMatch[1], body: parseBlocks(body), startLine });
+          i = endIdx + 1;
+          continue;
+        }
+
+        // if condition
+        const ifMatch = kw.match(/^if\s+(.+)$/);
+        if (ifMatch) {
+          i++;
+          const { branches, elseBody, endIdx } = collectIfBranches(lines, i, ifMatch[1]);
+          stmts.push({ kind: 'if', branches, elseBody, startLine });
+          i = endIdx + 1;
+          continue;
+        }
+
+        stmts.push({ kind: 'line', text: lines[i].text, startLine });
+        i++;
+      }
+      return stmts;
+    }
+
+    function collectBody(lines: { text: string; startLine: number }[], start: number): { body: typeof lines; endIdx: number } {
+      const body: typeof lines = [];
+      let depth = 1;
+      let i = start;
+      while (i < lines.length) {
+        const kw = stripComment(lines[i].text.trim());
+        if (/^(for|while|if)\s+/.test(kw)) depth++;
+        if (kw === 'end') { depth--; if (depth === 0) return { body, endIdx: i }; }
+        body.push(lines[i]);
+        i++;
+      }
+      return { body, endIdx: i - 1 };
+    }
+
+    function collectIfBranches(lines: { text: string; startLine: number }[], start: number, firstCond: string) {
+      const branches: { cond: string; body: { text: string; startLine: number }[] }[] = [{ cond: firstCond, body: [] }];
+      let elseBody: { text: string; startLine: number }[] | undefined;
+      let depth = 1;
+      let i = start;
+      let currentBody = branches[0].body;
+
+      while (i < lines.length) {
+        const kw = stripComment(lines[i].text.trim());
+        if (/^(for|while|if)\s+/.test(kw)) depth++;
+        if (kw === 'end') {
+          depth--;
+          if (depth === 0) return { branches, elseBody, endIdx: i };
+        }
+        if (depth === 1) {
+          const elseifMatch = kw.match(/^elseif\s+(.+)$/);
+          if (elseifMatch) {
+            branches.push({ cond: elseifMatch[1], body: [] });
+            currentBody = branches[branches.length - 1].body;
+            i++;
+            continue;
+          }
+          if (kw === 'else') {
+            elseBody = [];
+            currentBody = elseBody;
+            i++;
+            continue;
+          }
+        }
+        currentBody.push(lines[i]);
+        i++;
+      }
+      return { branches, elseBody, endIdx: i - 1 };
+    }
+
+    function stripComment(s: string): string {
+      const idx = s.indexOf('%');
+      return idx > 0 ? s.substring(0, idx).trim() : s;
+    }
+
+    const ast = parseBlocks(joined);
+
+    // 6. Track known variables for indexing disambiguation
     const knownVars = new Set<string>();
     // Built-in math.js functions that should NOT be treated as indexing
     const builtinFuncs = new Set([
@@ -526,88 +636,52 @@ export function createEngine() {
       'and','or','not','xor',
       'map','filter','forEach','partitionSelect',
       'lup','lusolve','lsolve','usolve','qr','slu',
+      'for','while','if','else','elseif','end','break','continue','return',
     ]);
 
-    // 5. Evaluate joined lines
+    // 7. Execute AST
     const results: EvalResult[] = [];
+    const MAX_ITER = 10000; // safety limit
 
-    for (const { text: rawText, startLine } of joined) {
-      const trimmed = rawText.trim();
-
-      if (trimmed === '') {
-        results.push({ line: startLine + 1, input: rawText, type: 'blank' });
-        continue;
-      }
-
-      if (trimmed.startsWith('%')) {
-        if (trimmed.startsWith('% ═') || trimmed.startsWith('% ───') || trimmed.startsWith('% ---')) {
-          results.push({ line: startLine + 1, input: rawText, type: 'separator' });
-        } else if (trimmed.includes('function') && trimmed.includes('defined')) {
-          results.push({ line: startLine + 1, input: rawText, type: 'funcdef', formatted: trimmed.substring(2) });
-        } else {
-          results.push({ line: startLine + 1, input: rawText, type: 'comment', formatted: trimmed.substring(1).trim() });
-        }
-        continue;
-      }
-
-      let expr = trimmed;
-      // Strip inline comments: E = 200e3  % this is a comment
-      // But don't strip % inside strings "..."
+    function prepExpr(raw: string): { expr: string; suppress: boolean } {
+      let expr = raw.trim();
+      // Strip inline comments
       const pctIdx = expr.indexOf('%');
       if (pctIdx > 0) {
-        // Check if % is inside a string
         const before = expr.substring(0, pctIdx);
         const dqCount = (before.match(/"/g) || []).length;
         const sqCount = (before.match(/'/g) || []).length;
-        if (dqCount % 2 === 0 && sqCount % 2 === 0) {
-          expr = expr.substring(0, pctIdx).trim();
-        }
+        if (dqCount % 2 === 0 && sqCount % 2 === 0) expr = expr.substring(0, pctIdx).trim();
       }
       const suppress = expr.endsWith(';');
       if (suppress) expr = expr.slice(0, -1).trim();
 
-      // Skip 'end' keyword (leftover from functions)
-      if (expr === 'end' || expr === 'endfunction' || expr === 'clc' || expr === 'clear' || expr === 'clear all') {
-        results.push({ line: startLine + 1, input: rawText, type: 'comment', formatted: expr });
-        continue;
-      }
-
-      // MATLAB → math.js compatibility
-      // Convert single-quoted strings to double-quoted for math.js: 'text' → "text"
+      // MATLAB compat
       expr = expr.replace(/'([^']*?)'/g, '"$1"');
-      // A' → transpose(A) — but NOT inside strings
       expr = expr.replace(/(\w+)'/g, 'transpose($1)');
-      // A \ b → inv(A) * b  (basic)
       expr = expr.replace(/(\w+)\s*\\\s*(\w+)/g, 'inv($1) * $2');
-
-      // MATLAB indexing: M(i,j) → _idx(M,i,j), v(i) → _idx(v,i)
-      // Only for known variables, not built-in functions
       expr = expr.replace(/\b([a-zA-Z_]\w*)\s*\(([^)]+)\)/g, (match, name, args) => {
-        if (builtinFuncs.has(name)) return match;
-        if (userFunctions.has(name)) return match;
-        if (!knownVars.has(name)) return match;
-        // It's a known variable — convert to _idx helper (handles vectors & matrices)
+        if (builtinFuncs.has(name) || userFunctions.has(name) || !knownVars.has(name)) return match;
         const indices = args.split(',').map((a: string) => a.trim());
         return `_idx(${name}, ${indices.join(', ')})`;
       });
+      return { expr, suppress };
+    }
 
+    function evalOneLine(rawText: string, startLine: number, suppress: boolean, expr: string) {
       try {
         const result = parser.evaluate(expr);
-
-        // Check if result is a PlotCommand or ViewCommand
         if (result instanceof PlotCommand) {
           results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
-          continue;
+          return;
         }
         if (result instanceof ViewCommand) {
           results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result });
-          continue;
+          return;
         }
-
         const assignMatch = expr.match(/^([a-zA-Z_]\w*)\s*=/);
         if (assignMatch) {
           knownVars.add(assignMatch[1]);
-          // Check if assigned value is a PlotCommand or ViewCommand
           if (result instanceof PlotCommand) {
             results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
           } else if (result instanceof ViewCommand) {
@@ -622,8 +696,7 @@ export function createEngine() {
         } else {
           results.push({
             line: startLine + 1, input: rawText, type: 'expr',
-            value: result,
-            formatted: suppress ? undefined : formatValue(result),
+            value: result, formatted: suppress ? undefined : formatValue(result),
           });
         }
       } catch (e: any) {
@@ -631,6 +704,92 @@ export function createEngine() {
       }
     }
 
+    function execStmts(stmts: Stmt[]) {
+      for (const stmt of stmts) {
+        if (stmt.kind === 'line') {
+          const trimmed = stmt.text.trim();
+          if (trimmed === '') { results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'blank' }); continue; }
+          if (trimmed.startsWith('%')) {
+            if (trimmed.startsWith('% ═') || trimmed.startsWith('% ───') || trimmed.startsWith('% ---')) {
+              results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'separator' });
+            } else {
+              results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'comment', formatted: trimmed.substring(1).trim() });
+            }
+            continue;
+          }
+          const kw = stripComment(trimmed);
+          if (kw === 'end' || kw === 'endfunction' || kw === 'clc' || kw === 'clear' || kw === 'clear all') continue;
+          const { expr, suppress } = prepExpr(trimmed);
+          if (!expr) continue;
+          evalOneLine(stmt.text, stmt.startLine, suppress, expr);
+
+        } else if (stmt.kind === 'for') {
+          // for i = start:end or for i = start:step:end or for i = [array]
+          results.push({ line: stmt.startLine + 1, input: `for ${stmt.varName} = ${stmt.range}`, type: 'comment', formatted: `for ${stmt.varName}` });
+          try {
+            const { expr: rangeExpr } = prepExpr(stmt.range);
+            const rangeVal = parser.evaluate(rangeExpr);
+            let values: number[];
+            if (typeof rangeVal === 'number') {
+              values = [rangeVal];
+            } else if (rangeVal && typeof rangeVal.toArray === 'function') {
+              values = rangeVal.toArray().flat();
+            } else if (Array.isArray(rangeVal)) {
+              values = rangeVal.flat();
+            } else {
+              values = [Number(rangeVal)];
+            }
+            let iter = 0;
+            for (const v of values) {
+              if (++iter > MAX_ITER) { results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: 'Max iterations exceeded' }); break; }
+              parser.set(stmt.varName, v);
+              knownVars.add(stmt.varName);
+              execStmts(stmt.body);
+            }
+          } catch (e: any) {
+            results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: `for: ${e.message}` });
+          }
+
+        } else if (stmt.kind === 'while') {
+          results.push({ line: stmt.startLine + 1, input: `while ${stmt.cond}`, type: 'comment', formatted: `while ...` });
+          let iter = 0;
+          try {
+            while (true) {
+              if (++iter > MAX_ITER) { results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: 'Max iterations exceeded' }); break; }
+              const { expr: condExpr } = prepExpr(stmt.cond);
+              const condVal = parser.evaluate(condExpr);
+              if (!condVal) break;
+              execStmts(stmt.body);
+            }
+          } catch (e: any) {
+            results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: `while: ${e.message}` });
+          }
+
+        } else if (stmt.kind === 'if') {
+          let executed = false;
+          for (const branch of stmt.branches) {
+            try {
+              const { expr: condExpr } = prepExpr(branch.cond);
+              const condVal = parser.evaluate(condExpr);
+              if (condVal) {
+                execStmts(parseBlocks(branch.body));
+                executed = true;
+                break;
+              }
+            } catch (e: any) {
+              results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: `if: ${e.message}` });
+              executed = true;
+              break;
+            }
+          }
+          if (!executed && stmt.elseBody) {
+            execStmts(parseBlocks(stmt.elseBody));
+          }
+        }
+      }
+    }
+
+    execStmts(ast);
     return results;
   }
 

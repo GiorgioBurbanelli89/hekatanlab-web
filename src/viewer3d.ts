@@ -15,7 +15,8 @@ export interface StructureViewData {
   loads?: number[][];       // [[nodeIdx, fx, fy, fz], ...] (1-based)
 }
 
-const BG = 0x111118;
+function isLight(): boolean { return document.body.classList.contains('light'); }
+function getBg(): number { return isLight() ? 0xf0f0f0 : 0x111118; }
 
 export class ViewCommand {
   constructor(public data: StructureViewData) {}
@@ -31,7 +32,7 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   container.style.position = 'relative';
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(BG);
+  scene.background = new THREE.Color(getBg());
 
   const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 10000);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -111,7 +112,8 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   if (data.title) {
     const td = document.createElement('div');
     td.textContent = data.title;
-    td.style.cssText = 'position:absolute;top:8px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.85);font:bold 13px sans-serif;pointer-events:none;';
+    const tc = isLight() ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)';
+    td.style.cssText = `position:absolute;top:8px;left:0;right:0;text-align:center;color:${tc};font:bold 13px sans-serif;pointer-events:none;`;
     container.appendChild(td);
   }
 
@@ -304,7 +306,9 @@ function getDeformedNodes(nodes: number[][], U: number[], dofPerNode: number, sc
 }
 
 function addGrid(scene: THREE.Scene, size: number, center: THREE.Vector3) {
-  const grid = new THREE.GridHelper(size, 10, 0x333344, 0x222233);
+  const gc1 = isLight() ? 0xbbbbcc : 0x333344;
+  const gc2 = isLight() ? 0xccccdd : 0x222233;
+  const grid = new THREE.GridHelper(size, 10, gc1, gc2);
   grid.rotation.x = Math.PI / 2;
   grid.position.copy(center);
   grid.position.z = Math.min(center.z, 0);

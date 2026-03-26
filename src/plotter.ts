@@ -19,7 +19,19 @@ export interface PlotData {
 }
 
 const COLORS = [0x4fc3f7, 0xff7043, 0x66bb6a, 0xab47bc, 0xffa726, 0xef5350, 0x26c6da, 0xec407a];
-const BG_COLOR = 0x111118;
+const COLORS_LIGHT = [0x1976d2, 0xe64a19, 0x2e7d32, 0x7b1fa2, 0xf57c00, 0xc62828, 0x00838f, 0xad1457];
+
+function isLightTheme(): boolean { return document.body.classList.contains('light'); }
+function getBg(): number { return isLightTheme() ? 0xf0f0f0 : 0x111118; }
+function getBgHex(): string { return isLightTheme() ? '#f0f0f0' : '#111118'; }
+function getTextColor(alpha = 0.6): string { return isLightTheme() ? `rgba(0,0,0,${alpha})` : `rgba(255,255,255,${alpha})`; }
+function getGridColor(): string { return isLightTheme() ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.06)'; }
+function getBorderColor(): string { return isLightTheme() ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)'; }
+function getPlotColor(idx = 0): string {
+  const c = isLightTheme() ? COLORS_LIGHT : COLORS;
+  const hex = c[idx % c.length].toString(16).padStart(6, '0');
+  return '#' + hex;
+}
 
 // ── Main render function ──
 export function renderPlot(data: PlotData, width = 560, height = 400): HTMLDivElement {
@@ -53,7 +65,7 @@ function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
 
   // Scene
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(BG_COLOR);
+  scene.background = new THREE.Color(getBg());
 
   // Camera
   const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 1000);
@@ -100,7 +112,8 @@ function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
   if (data.title) {
     const titleDiv = document.createElement('div');
     titleDiv.textContent = data.title;
-    titleDiv.style.cssText = 'position:absolute;top:8px;left:0;right:0;text-align:center;color:rgba(255,255,255,0.85);font:bold 13px sans-serif;pointer-events:none;';
+    const titleColor = isLightTheme() ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)';
+    titleDiv.style.cssText = `position:absolute;top:8px;left:0;right:0;text-align:center;color:${titleColor};font:bold 13px sans-serif;pointer-events:none;`;
     container.appendChild(titleDiv);
   }
 
@@ -229,7 +242,9 @@ function addSurf(scene: THREE.Scene, data: PlotData): { min: THREE.Vector3; max:
 
 function addGrid(scene: THREE.Scene, size: number, center: THREE.Vector3) {
   const divisions = 10;
-  const grid = new THREE.GridHelper(size, divisions, 0x333344, 0x222233);
+  const gc1 = isLightTheme() ? 0xbbbbcc : 0x333344;
+  const gc2 = isLightTheme() ? 0xccccdd : 0x222233;
+  const grid = new THREE.GridHelper(size, divisions, gc1, gc2);
   grid.rotation.x = Math.PI / 2; // Z-up
   grid.position.set(center.x, center.y, center.z - (center.z > 0 ? center.z : 0));
   scene.add(grid);
@@ -287,13 +302,13 @@ function render2DCanvas(data: PlotData, W: number, H: number): HTMLCanvasElement
   const toY = (v: number) => pad.top + ph - ((v - yMin) / (yMax - yMin)) * ph;
 
   // Background
-  ctx.fillStyle = '#111118';
+  ctx.fillStyle = getBgHex();
   ctx.fillRect(0, 0, W, H);
 
   // Grid
   const xTicks = niceTicks(xMin, xMax, 6);
   const yTicks = niceTicks(yMin, yMax, 5);
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.strokeStyle = getGridColor();
   ctx.lineWidth = 1;
   for (const v of yTicks) {
     const yy = toY(v);
@@ -305,11 +320,11 @@ function render2DCanvas(data: PlotData, W: number, H: number): HTMLCanvasElement
   }
 
   // Axes border
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.strokeStyle = getBorderColor();
   ctx.strokeRect(pad.left, pad.top, pw, ph);
 
   // Tick labels
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.fillStyle = getTextColor(0.55);
   ctx.font = '11px monospace';
   ctx.textAlign = 'center';
   for (const v of xTicks) {
@@ -322,7 +337,7 @@ function render2DCanvas(data: PlotData, W: number, H: number): HTMLCanvasElement
     if (yy >= pad.top && yy <= pad.top + ph) ctx.fillText(fmtTick(v), pad.left - 8, yy + 4);
   }
 
-  const hexColor = data.color || '#4fc3f7';
+  const hexColor = data.color || getPlotColor(0);
 
   if (data.type === 'bar') {
     const barW = Math.max(2, pw / x.length * 0.7);
@@ -369,21 +384,21 @@ function render2DCanvas(data: PlotData, W: number, H: number): HTMLCanvasElement
 
   // Title
   if (data.title) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = getTextColor(0.85);
     ctx.font = 'bold 13px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(data.title, W / 2, 22);
   }
   // Axis labels
   if (data.xlabel) {
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillStyle = getTextColor(0.55);
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(data.xlabel, pad.left + pw / 2, H - 8);
   }
   if (data.ylabel) {
     ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillStyle = getTextColor(0.55);
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.translate(14, pad.top + ph / 2);
