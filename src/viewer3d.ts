@@ -385,7 +385,16 @@ function addSupports(scene: THREE.Scene, nodes: number[][], supports: number[], 
 }
 
 function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxDim: number) {
-  for (const ld of loads) {
+  // Handle single load row: [3,0,0,-100] → [[3,0,0,-100]]
+  let loadList = loads;
+  if (loadList.length > 0 && typeof loadList[0] === 'number') {
+    loadList = [loadList as any];
+  }
+  // Handle column vectors: [[3],[0],[0],[-100]] → [[3,0,0,-100]]
+  if (loadList.length >= 4 && loadList.every(r => Array.isArray(r) && r.length === 1)) {
+    loadList = [loadList.map(r => r[0])];
+  }
+  for (const ld of loadList) {
     if (!ld || ld.length < 4) continue;
     const idx = Math.round(ld[0]);
     const fx = ld[1] || 0, fy = ld[2] || 0, fz = ld[3] || 0;
