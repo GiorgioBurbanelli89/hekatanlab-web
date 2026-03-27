@@ -5240,7 +5240,7 @@ disp("Desplazamientos (6 DOFs):")
 Uf
 
 % Deformada
-show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")`},{name:"FEM — Nave industrial 3D",category:"FEM",code:`% Nave industrial 3D
+show_deformed(nds, els, Uf, 5, 2, "Deformada (5x)")`},{name:"FEM — Nave industrial 3D",category:"FEM",code:`% Nave industrial 3D
 nds = [0,0,0; 12,0,0; 0,0,5; 12,0,5; 6,0,7; 0,6,0; 12,6,0; 0,6,5; 12,6,5; 6,6,7]
 
 els = [1,3; 2,4; 3,5; 4,5; 6,8; 7,9; 8,10; 9,10; 3,8; 4,9; 5,10]
@@ -5559,7 +5559,7 @@ Fr = subvec(Fv, free)
 Ur = inv(Kr) * Fr
 Uf = fullvec(Ur, free, nDof)
 
-show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")`},{name:"Awatif — Estructura 3D",category:"Awatif",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 5, 2, "Deformada (5x)")`},{name:"Awatif — Estructura 3D",category:"Awatif",code:`% ═══════════════════════════════════════════
 % Estructura 3D (awatif v2.0.0 3d-structure)
 % Torre con vigas, columnas y diagonales
 % Funciones MATLAB desglosadas
