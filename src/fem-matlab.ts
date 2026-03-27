@@ -509,77 +509,67 @@ end`
   // Estas reemplazan las funciones TypeScript ocultas
   // ═══════════════════════════════════════
 
+  // ── Solver utilities (implemented as JS builtins for performance) ──
+  // These are shown in the 📚 panel but executed as native JS functions
   {
     name: 'freedofs',
     params: ['nDof', 'fixed'],
-    description: 'DOFs libres: complemento de los DOFs fijos (1-based)',
-    body: `% fixed = vector con DOFs restringidos (1-based)
-% Retorna vector con DOFs no restringidos
-result = []
-for i = range(1, nDof, 1)
-  es_fijo = 0
-  for j = range(1, length(fixed), 1)
-    if fixed(j) == i
-      es_fijo = 1
-    end
-  end
-  if es_fijo == 0
-    result = [result, i]
-  end
-end`
+    description: '[Builtin JS] DOFs libres: complemento de los fijos',
+    body: `% Implementado como builtin JS (rapido)
+% Equivalente MATLAB:
+% result = []
+% for i = 1:nDof
+%   if ~any(fixed == i)
+%     result = [result, i]
+%   end
+% end`
   },
-
   {
     name: 'submat',
     params: ['K', 'dofs'],
-    description: 'Submatriz: extrae filas y columnas de K en DOFs dados (1-based)',
-    body: `% K = matriz global, dofs = indices a extraer
-n = length(dofs)
-Ksub = zeros(n, n)
-for i = range(1, n, 1)
-  for j = range(1, n, 1)
-    Ksub(i, j) = K(dofs(i), dofs(j))
-  end
-end`
+    description: '[Builtin JS] Submatriz en DOFs dados',
+    body: `% Implementado como builtin JS (rapido)
+% Equivalente MATLAB:
+% n = length(dofs)
+% Ksub = zeros(n,n)
+% for i = 1:n
+%   for j = 1:n
+%     Ksub(i,j) = K(dofs(i), dofs(j))
+%   end
+% end`
   },
-
   {
     name: 'subvec',
     params: ['F', 'dofs'],
-    description: 'Subvector: extrae componentes de F en DOFs dados (1-based)',
-    body: `% F = vector global, dofs = indices a extraer
-n = length(dofs)
-Fsub = zeros(n, 1)
-for i = range(1, n, 1)
-  Fsub(i) = F(dofs(i))
-end`
+    description: '[Builtin JS] Subvector en DOFs dados',
+    body: `% Implementado como builtin JS (rapido)
+% Equivalente: Fsub(i) = F(dofs(i))`
   },
-
   {
     name: 'fullvec',
     params: ['Ur', 'free', 'nTotal'],
-    description: 'Vector completo: expande solucion reducida a vector total',
-    body: `% Ur = solucion reducida, free = DOFs libres, nTotal = tamaño total
-Ufull = zeros(nTotal, 1)
-n = length(free)
-for i = range(1, n, 1)
-  Ufull(free(i)) = Ur(i)
-end`
+    description: '[Builtin JS] Expandir vector reducido a vector completo',
+    body: `% Implementado como builtin JS (rapido)
+% Equivalente: Ufull = zeros(nTotal,1); Ufull(free(i)) = Ur(i)`
   },
-
   {
     name: 'assemble_k',
     params: ['Kg', 'Ke', 'dofs'],
-    description: 'Ensamblaje: suma Ke en Kg en posiciones de DOFs (1-based)',
-    body: `% Kg = global, Ke = elemento, dofs = mapeo DOF global
-n = length(dofs)
-for i = range(1, n, 1)
-  for j = range(1, n, 1)
-    gi = dofs(i)
-    gj = dofs(j)
-    Kg(gi, gj) = Kg(gi, gj) + Ke(i, j)
-  end
-end`
+    description: '[Builtin JS] Ensamblaje K global',
+    body: `% Implementado como builtin JS = assemble(Kg, Ke, dofs)
+% Equivalente: Kg(dofs(i),dofs(j)) += Ke(i,j)`
+  },
+  {
+    name: 'solve_fem',
+    params: ['Kg', 'Fv', 'fixed'],
+    description: '[Builtin JS] Resolver sistema FEM completo',
+    body: `% Implementado como builtin JS (rapido)
+% Equivalente:
+% free = freedofs(nDof, fixed)
+% Kr = submat(Kg, free)
+% Fr = subvec(Fv, free)
+% Ur = Kr \\ Fr
+% Uf = fullvec(Ur, free, nDof)`
   },
 
   {
