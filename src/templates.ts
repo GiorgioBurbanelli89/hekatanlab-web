@@ -552,9 +552,8 @@ Fr = subvec(Fv, free)
 Ur = inv(Kr) * Fr
 Uf = fullvec(Ur, free, 6)
 
-disp("Desplazamientos nodo 3 (ux, uz):")
-disp(Uf(5))
-disp(Uf(6))
+disp("Desplazamientos (6 DOFs):")
+Uf
 
 % Deformada
 show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")` },
