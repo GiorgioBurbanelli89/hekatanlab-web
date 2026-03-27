@@ -34,7 +34,7 @@ export function renderOutput(container: HTMLElement, results: EvalResult[], edit
         break;
 
       case 'assign': {
-        if (r.formatted === undefined) break; // suppressed with ;
+        if (r.formatted === undefined) { div.style.display = 'none'; break; } // suppressed with ;
 
         // Try KaTeX rendering
         const katexStr = valueToKatex(r.varName!, r.value);
@@ -56,6 +56,8 @@ export function renderOutput(container: HTMLElement, results: EvalResult[], edit
       case 'expr':
         if (r.formatted) {
           div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
+        } else {
+          div.style.display = 'none'; // suppressed with ;
         }
         break;
 

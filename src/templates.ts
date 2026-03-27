@@ -606,4 +606,128 @@ Kr = submat(Kg, free)
 Fr = subvec(Fv, free)
 Ur = inv(Kr) * Fr
 Uf = fullvec(Ur, free, nDof)` },
+
+  // ══════════════════════════════════════════
+  // Column Buckling (Ormonde)
+  // ══════════════════════════════════════════
+
+  { name: 'Buckling — Restricción discreta', category: 'Buckling', code: `% ═══════════════════════════════════════════
+% Pandeo de columna — Resorte lateral discreto
+% Ormonde - Linear Column Buckling Exercises
+% ═══════════════════════════════════════════
+
+% Datos (kN, cm)
+E = 20000;
+I_sec = 1673;
+L = 1500;
+nk = 1;
+step_seg = 5;
+
+% ── Solución analítica ──
+Ne = pi^2 * E * I_sec / L^2
+KT = 16 * Ne / L
+Ncrit_exact = 4 * Ne
+
+% ── FEM ──
+ne = step_seg * (nk + 1);
+nn = ne + 1;
+ndof = 2 * nn;
+Le = L / ne;
+
+% Rigidez elástica (viga Euler-Bernoulli, 4 DOF: v1,th1,v2,th2)
+ck = E * I_sec / Le^3;
+Ke = ck * [12, 6*Le, -12, 6*Le; 6*Le, 4*Le^2, -6*Le, 2*Le^2; -12, -6*Le, 12, -6*Le; 6*Le, 2*Le^2, -6*Le, 4*Le^2];
+
+% Rigidez geométrica
+cg = 1 / (30 * Le);
+Ge = cg * [36, 3*Le, -36, 3*Le; 3*Le, 4*Le^2, -3*Le, -Le^2; -36, -3*Le, 36, -3*Le; 3*Le, -Le^2, -3*Le, 4*Le^2];
+
+% Ensamblaje global
+K = zeros(ndof, ndof);
+G = zeros(ndof, ndof);
+for e = range(1, ne, 1)
+  d1 = 2*e - 1;
+  d2 = 2*e;
+  d3 = 2*e + 1;
+  d4 = 2*e + 2;
+  K = assemble(K, Ke, [d1, d2, d3, d4]);
+  G = assemble(G, Ge, [d1, d2, d3, d4]);
+end
+
+% Agregar resorte discreto central
+for s = range(1, nk, 1)
+  node_s = s * step_seg + 1;
+  dof_s = 2 * node_s - 1;
+  K = assemble(K, [[KT]], [dof_s]);
+end
+
+% BCs: articulado-articulado (v=0 en extremos)
+fixed = [1, 2*nn - 1];
+free = freedofs(ndof, fixed);
+Kr = submat(K, free);
+Gr = submat(G, free);
+
+% Resolver: K*phi = Ncr*G*phi
+Ncr = geneig(Kr, Gr, 5)` },
+
+  { name: 'Buckling — Restricción continua', category: 'Buckling', code: `% ═══════════════════════════════════════════
+% Pandeo de columna — Restricción elástica continua
+% Ormonde - Linear Column Buckling Exercises
+% ═══════════════════════════════════════════
+
+% Datos (kN, cm)
+E = 20000;
+I_sec = 1673;
+L = 1500;
+ne = 20;
+
+% Rigidez continua del resorte
+kc = 20 / 375;
+
+% ── Solución analítica ──
+Ne = pi^2 * E * I_sec / L^2
+Ncra = 2 * sqrt(kc * E * I_sec)
+m = 3;
+beta = sqrt(kc * L^2 / (pi^2 * Ne))
+Ncrb = Ne * beta * (m^2 / beta + beta / m^2)
+
+% ── FEM ──
+nn = ne + 1;
+ndof = 2 * nn;
+Le = L / ne;
+
+% Rigidez elástica (Euler-Bernoulli)
+ck = E * I_sec / Le^3;
+Ke = ck * [12, 6*Le, -12, 6*Le; 6*Le, 4*Le^2, -6*Le, 2*Le^2; -12, -6*Le, 12, -6*Le; 6*Le, 2*Le^2, -6*Le, 4*Le^2];
+
+% Rigidez geométrica
+cg = 1 / (30 * Le);
+Ge = cg * [36, 3*Le, -36, 3*Le; 3*Le, 4*Le^2, -3*Le, -Le^2; -36, -3*Le, 36, -3*Le; 3*Le, -Le^2, -3*Le, 4*Le^2];
+
+% Fundación elástica continua (funciones de forma consistentes)
+Kf = kc * Le * [13/35, 11*Le/210, 9/70, -13*Le/420; 11*Le/210, Le^2/105, 13*Le/420, -Le^2/140; 9/70, 13*Le/420, 13/35, -11*Le/210; -13*Le/420, -Le^2/140, -11*Le/210, Le^2/105];
+
+% Rigidez total por elemento
+Ke_total = Ke + Kf;
+
+% Ensamblaje global
+K = zeros(ndof, ndof);
+G = zeros(ndof, ndof);
+for e = range(1, ne, 1)
+  d1 = 2*e - 1;
+  d2 = 2*e;
+  d3 = 2*e + 1;
+  d4 = 2*e + 2;
+  K = assemble(K, Ke_total, [d1, d2, d3, d4]);
+  G = assemble(G, Ge, [d1, d2, d3, d4]);
+end
+
+% BCs: articulado-articulado
+fixed = [1, 2*nn - 1];
+free = freedofs(ndof, fixed);
+Kr = submat(K, free);
+Gr = submat(G, free);
+
+% Resolver: K*phi = Ncr*G*phi
+Ncr = geneig(Kr, Gr, 5)` },
 ];

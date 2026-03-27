@@ -412,6 +412,82 @@ export function createEngine() {
         title: args[3] as string || 'Contour'
       });
     });
+
+    // freedofs(ndof, fixed_array) — returns complement DOF indices (1-based)
+    p.set('freedofs', (ndof: number, fixed: any) => {
+      let f: number[];
+      if (fixed && typeof fixed.toArray === 'function') f = fixed.toArray().flat().map(Number);
+      else if (Array.isArray(fixed)) f = fixed.flat().map(Number);
+      else f = [Number(fixed)];
+      const result: number[] = [];
+      for (let i = 1; i <= ndof; i++) {
+        if (!f.includes(i)) result.push(i);
+      }
+      return result;
+    });
+
+    // geneig(K, G, nModes) — generalized eigenvalue: K*phi = lambda*G*phi
+    // Returns sorted critical loads (ascending) using Cholesky transformation
+    p.set('geneig', (...args: any[]) => {
+      const K = args[0], G = args[1];
+      const nModes = (typeof args[2] === 'number') ? args[2] : 5;
+      let km: number[][] = K.toArray ? K.toArray() : K;
+      let gm: number[][] = G.toArray ? G.toArray() : G;
+      const sz = km.length;
+
+      // Cholesky: K = L * L'
+      const L: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++) {
+        for (let j = 0; j <= i; j++) {
+          let s = 0;
+          for (let k = 0; k < j; k++) s += L[i][k] * L[j][k];
+          L[i][j] = (i === j) ? Math.sqrt(Math.max(km[i][i] - s, 1e-30)) : (km[i][j] - s) / L[j][j];
+        }
+      }
+      // Linv (lower triangular inverse)
+      const Li: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++) {
+        Li[i][i] = 1 / L[i][i];
+        for (let j = i + 1; j < sz; j++) {
+          let s = 0;
+          for (let k = i; k < j; k++) s += L[j][k] * Li[k][i];
+          Li[j][i] = -s / L[j][j];
+        }
+      }
+      // B = Linv * G * Linv' (symmetric)
+      const tmp: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++)
+        for (let j = 0; j < sz; j++) {
+          let s = 0;
+          for (let k = 0; k < sz; k++) s += gm[i][k] * Li[j][k];
+          tmp[i][j] = s;
+        }
+      const B: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++)
+        for (let j = 0; j < sz; j++) {
+          let s = 0;
+          for (let k = 0; k < sz; k++) s += Li[i][k] * tmp[k][j];
+          B[i][j] = s;
+        }
+      // Force symmetry
+      for (let i = 0; i < sz; i++)
+        for (let j = i + 1; j < sz; j++) {
+          const avg = (B[i][j] + B[j][i]) / 2;
+          B[i][j] = avg; B[j][i] = avg;
+        }
+
+      // eigs(B) → eigenvalues = 1/Ncr
+      const result = math.eigs(math.matrix(B));
+      let ev: number[];
+      const vals = result.values;
+      if (vals && typeof vals.toArray === 'function') ev = vals.toArray().flat().map(Number);
+      else if (Array.isArray(vals)) ev = vals.map(Number);
+      else ev = [Number(vals)];
+
+      const ncrs = ev.filter(v => v > 1e-12).map(v => 1/v)
+        .filter(v => isFinite(v) && !isNaN(v) && v > 0).sort((a, b) => a - b);
+      return math.matrix(ncrs.slice(0, Math.min(nModes, ncrs.length)));
+    });
   }
 
   function toArray2DArg(v: any): number[][] {
@@ -631,7 +707,7 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
-      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx',
+      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx','freedofs','geneig',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',
