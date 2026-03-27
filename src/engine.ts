@@ -905,6 +905,26 @@ export function createEngine() {
     // disp() — always shows output even inside loops (MATLAB behavior)
     parser.set('disp', (...args: any[]) => new DispCommand(args.length === 1 ? args[0] : args));
 
+    // Override size() to support size(M, dim) — MATLAB style
+    parser.set('size', (...args: any[]) => {
+      const M = args[0];
+      const s = math.size(M);
+      const sArr = s.toArray ? s.toArray() : (Array.isArray(s) ? s : [s]);
+      if (args.length === 1) return math.matrix(sArr);
+      const dim = Math.round(Number(args[1]));
+      return dim >= 1 && dim <= sArr.length ? sArr[dim - 1] : 0;
+    });
+
+    // Override length() to return max dimension — MATLAB style
+    const origLength = math.typed('length', { 'any': (x: any) => {
+      try {
+        const s = math.size(x);
+        const sArr = s.toArray ? s.toArray() : (Array.isArray(s) ? s : [s]);
+        return Math.max(...sArr.map(Number));
+      } catch { return 1; }
+    }});
+    parser.set('length', origLength);
+
     // Override norm() to handle column vectors (Nx1 matrices)
     const origNorm = math.norm;
     parser.set('norm', (v: any) => {
