@@ -385,15 +385,17 @@ function addSupports(scene: THREE.Scene, nodes: number[][], supports: number[], 
 }
 
 function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxDim: number) {
-  // Handle single load row: [3,0,0,-100] → [[3,0,0,-100]]
+  // Normalize input: handle 1D, column vector, and 2D formats
   let loadList = loads;
   if (loadList.length > 0 && typeof loadList[0] === 'number') {
-    loadList = [loadList as any];
+    loadList = [loadList as any]; // 1D → wrap
   }
-  // Handle column vectors: [[3],[0],[0],[-100]] → [[3,0,0,-100]]
   if (loadList.length >= 4 && loadList.every(r => Array.isArray(r) && r.length === 1)) {
-    loadList = [loadList.map(r => r[0])];
+    loadList = [loadList.map(r => r[0])]; // column → row
   }
+
+  const arrowScale = maxDim * 0.08; // awatif style: 8% of model size
+
   for (const ld of loadList) {
     if (!ld || ld.length < 4) continue;
     const idx = Math.round(ld[0]);
@@ -405,12 +407,11 @@ function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxD
     const mag = dir.length();
     if (mag < 1e-10) continue;
     dir.normalize();
-    // Arrow points TO the node: origin offset backwards from node
-    const arrowLen = maxDim * 0.25;
-    const arrowOrigin = nodePos.clone().sub(dir.clone().multiplyScalar(arrowLen));
-    const headLen = arrowLen * 0.25;
-    const headW = arrowLen * 0.12;
-    scene.add(new THREE.ArrowHelper(dir, arrowOrigin, arrowLen, 0xff6600, headLen, headW));
+
+    // Arrow with unit length, then scale (awatif pattern)
+    const arrow = new THREE.ArrowHelper(dir, nodePos, 1, 0xee9b00, 0.3, 0.15);
+    arrow.scale.set(arrowScale, arrowScale, arrowScale);
+    scene.add(arrow);
   }
 }
 
