@@ -2,8 +2,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+export interface DiagramData {
+  elemForces: number[][];   // [[fi, fj], ...] per element — values at each end
+  type: 'constant' | 'linear';  // constant=N/V (rect), linear=M (trapezoid)
+  label?: string;           // "N", "V", "M"
+}
+
 export interface StructureViewData {
-  type: 'mesh' | 'deformed' | 'contour';
+  type: 'mesh' | 'deformed' | 'contour' | 'diagram';
   nodes: number[][];        // [[x,y,z], ...]
   elements: number[][];     // [[i,j], [i,j,k], [i,j,k,l], ...]  (1-based)
   U?: number[];             // displacement vector (all DOFs)
@@ -13,6 +19,7 @@ export interface StructureViewData {
   title?: string;
   supports?: number[];      // node indices with supports (1-based)
   loads?: number[][];       // [[nodeIdx, fx, fy, fz], ...] (1-based)
+  diagram?: DiagramData;    // force diagram data
 }
 
 function isLight(): boolean { return document.body.classList.contains('light'); }
@@ -64,39 +71,34 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   // ── Draw elements ──
   if (data.type === 'contour' && data.values) {
     addContour(scene, nodes, elements, data.values);
-  } else {
-    // Wireframe structure
-    addWireframe(scene, nodes, elements, 0x4488cc);
-  }
-
-  // ── Deformed shape ──
-  if (data.type === 'deformed' && data.U) {
+  } else if (data.type === 'diagram' && data.diagram) {
+    // Draw structure in gray + force diagram overlay
+    addWireframe(scene, nodes, elements, 0x555566);
+    addDiagram(scene, nodes, elements, data.diagram, maxDim);
+  } else if (data.type === 'deformed' && data.U) {
     const scale = data.scale || 1;
     const defNodes = getDeformedNodes(nodes, data.U, dofPerNode, scale);
     addWireframe(scene, defNodes, elements, 0xff7043);
-    // Also draw original as dashed
     addWireframe(scene, nodes, elements, 0x4488cc, true);
+  } else {
+    addWireframeColored(scene, nodes, elements);
   }
 
-  // ── Nodes ──
+  // ── Nodes (spheres — awatif-ui style) ──
   addNodes(scene, nodes, 0x66bb6a, maxDim);
 
   // ── Supports ──
-  if (data.supports) {
-    addSupports(scene, nodes, data.supports, maxDim);
-  }
+  if (data.supports) addSupports(scene, nodes, data.supports, maxDim);
 
   // ── Loads ──
-  if (data.loads) {
-    addLoads(scene, nodes, data.loads, maxDim);
-  }
+  if (data.loads) addLoads(scene, nodes, data.loads, maxDim);
 
   // Grid & axes
   addGrid(scene, maxDim * 1.5, center);
   addAxes(scene, maxDim * 0.3, min);
 
   // Lighting
-  scene.add(new THREE.AmbientLight(0x404040, 2));
+  scene.add(new THREE.AmbientLight(0x606060, 2));
   const dl = new THREE.DirectionalLight(0xffffff, 1);
   dl.position.set(maxDim, -maxDim, maxDim * 2);
   scene.add(dl);
@@ -118,9 +120,7 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   }
 
   // Legend for contour
-  if (data.type === 'contour' && data.values) {
-    addLegend(container, data.values);
-  }
+  if (data.type === 'contour' && data.values) addLegend(container, data.values);
 
   // Animate
   let animId = 0;
@@ -144,17 +144,18 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   return container;
 }
 
-// ── Wireframe elements ──
+// ═══════════════════════════════════════════════════
+//  ELEMENT RENDERING
+// ═══════════════════════════════════════════════════
+
 function addWireframe(scene: THREE.Scene, nodes: number[][], elements: number[][], color: number, dashed = false) {
   for (const el of elements) {
     const pts: THREE.Vector3[] = [];
     for (const idx of el) {
-      const n = nodes[idx - 1]; // 1-based
+      const n = nodes[idx - 1];
       if (n) pts.push(new THREE.Vector3(n[0], n[1] || 0, n[2] || 0));
     }
     if (pts.length < 2) continue;
-
-    // Close polygon for shells (3 or 4 nodes)
     if (pts.length >= 3) pts.push(pts[0].clone());
 
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
@@ -165,52 +166,223 @@ function addWireframe(scene: THREE.Scene, nodes: number[][], elements: number[][
     if (dashed) line.computeLineDistances();
     scene.add(line);
 
-    // Fill for shells (3 or 4 nodes) with transparent face
     if (el.length >= 3 && !dashed) {
       const faceGeo = new THREE.BufferGeometry();
       const verts: number[] = [];
       if (el.length === 3) {
         for (const p of pts.slice(0, 3)) verts.push(p.x, p.y, p.z);
       } else if (el.length === 4) {
-        // Two triangles
         for (const idx of [0,1,2, 0,2,3]) verts.push(pts[idx].x, pts[idx].y, pts[idx].z);
       }
       faceGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
       faceGeo.computeVertexNormals();
-      const faceMat = new THREE.MeshPhongMaterial({
-        color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.25
-      });
-      scene.add(new THREE.Mesh(faceGeo, faceMat));
+      scene.add(new THREE.Mesh(faceGeo, new THREE.MeshPhongMaterial({
+        color, side: THREE.DoubleSide, transparent: true, opacity: 0.25
+      })));
     }
   }
 }
 
-// ── Nodes as points ──
-function addNodes(scene: THREE.Scene, nodes: number[][], color: number, maxDim: number) {
-  const geo = new THREE.BufferGeometry();
-  const positions: number[] = [];
-  for (const [x, y, z] of nodes) {
-    positions.push(x, y || 0, z || 0);
+// Color-coded wireframe: columns (green), beams (blue), diagonals (orange)
+function addWireframeColored(scene: THREE.Scene, nodes: number[][], elements: number[][]) {
+  const COL_BEAM = 0x4488cc;
+  const COL_COLUMN = 0x88cc44;
+  const COL_DIAG = 0xcc8844;
+  const COL_SHELL = 0x4488cc;
+
+  for (const el of elements) {
+    const pts: THREE.Vector3[] = [];
+    for (const idx of el) {
+      const n = nodes[idx - 1];
+      if (n) pts.push(new THREE.Vector3(n[0], n[1] || 0, n[2] || 0));
+    }
+    if (pts.length < 2) continue;
+
+    let color = COL_SHELL;
+    if (el.length === 2) {
+      const dz = Math.abs(pts[1].z - pts[0].z);
+      const len = pts[0].distanceTo(pts[1]);
+      if (len > 1e-6) {
+        const vertRatio = dz / len;
+        if (vertRatio > 0.85) color = COL_COLUMN;
+        else if (vertRatio < 0.15) color = COL_BEAM;
+        else color = COL_DIAG;
+      }
+    }
+    if (pts.length >= 3) pts.push(pts[0].clone());
+
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color, linewidth: 2 })));
+
+    if (el.length >= 3) {
+      const faceGeo = new THREE.BufferGeometry();
+      const verts: number[] = [];
+      if (el.length === 3) {
+        for (const p of pts.slice(0, 3)) verts.push(p.x, p.y, p.z);
+      } else if (el.length === 4) {
+        for (const i of [0,1,2, 0,2,3]) verts.push(pts[i].x, pts[i].y, pts[i].z);
+      }
+      faceGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+      faceGeo.computeVertexNormals();
+      scene.add(new THREE.Mesh(faceGeo, new THREE.MeshPhongMaterial({
+        color, side: THREE.DoubleSide, transparent: true, opacity: 0.25
+      })));
+    }
   }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({ color, size: maxDim * 0.03, sizeAttenuation: true });
-  scene.add(new THREE.Points(geo, mat));
 }
 
-// ── Supports (red boxes) ──
+// ═══════════════════════════════════════════════════
+//  FORCE DIAGRAM (awatif-ui frameResults style)
+// ═══════════════════════════════════════════════════
+
+function addDiagram(scene: THREE.Scene, nodes: number[][], elements: number[][],
+  diag: DiagramData, maxDim: number) {
+
+  const forces = diag.elemForces;
+  // Find max absolute force for normalization
+  let fMax = 0;
+  for (const [fi, fj] of forces) {
+    fMax = Math.max(fMax, Math.abs(fi), Math.abs(fj));
+  }
+  if (fMax < 1e-20) return;
+
+  const diagScale = maxDim * 0.25; // max diagram height = 25% of model size
+  const COL_POS = 0x005f73;  // teal for positive (awatif)
+  const COL_NEG = 0xae2012;  // red for negative (awatif)
+
+  for (let e = 0; e < elements.length; e++) {
+    const el = elements[e];
+    if (el.length !== 2) continue;
+    if (e >= forces.length) continue;
+
+    const n1 = nodes[el[0] - 1];
+    const n2 = nodes[el[1] - 1];
+    if (!n1 || !n2) continue;
+
+    const p1 = new THREE.Vector3(n1[0], n1[1] || 0, n1[2] || 0);
+    const p2 = new THREE.Vector3(n2[0], n2[1] || 0, n2[2] || 0);
+
+    const [fi, fj] = forces[e];
+    const hi = (fi / fMax) * diagScale;
+    const hj = (fj / fMax) * diagScale;
+
+    // Element local axes
+    const dir = new THREE.Vector3().subVectors(p2, p1).normalize();
+
+    // Perpendicular direction (in the element plane, toward Z-up)
+    let perp: THREE.Vector3;
+    const up = new THREE.Vector3(0, 0, 1);
+    if (Math.abs(dir.dot(up)) > 0.95) {
+      // Vertical element: use Y as perpendicular
+      perp = new THREE.Vector3(0, 1, 0).cross(dir).normalize();
+      if (perp.length() < 0.5) perp = new THREE.Vector3(1, 0, 0);
+    } else {
+      perp = new THREE.Vector3().crossVectors(dir, up).normalize();
+      // Rotate perp to be perpendicular to element in the vertical plane
+      perp = new THREE.Vector3().crossVectors(perp, dir).normalize();
+    }
+
+    // Offset points for diagram
+    const d1 = p1.clone().addScaledVector(perp, hi);
+    const d2 = p2.clone().addScaledVector(perp, hj);
+
+    if (diag.type === 'constant') {
+      // Rectangle: same height at both ends (use average if slightly different)
+      drawDiagramFace(scene, p1, p2, d1, d2, fi >= 0 ? COL_POS : COL_NEG);
+    } else {
+      // Linear (moment): trapezoid — different heights at each end
+      // Could cross zero — split into two parts
+      if (fi * fj >= 0) {
+        // Same sign
+        const col = fi >= 0 ? COL_POS : COL_NEG;
+        drawDiagramFace(scene, p1, p2, d1, d2, col);
+      } else {
+        // Crosses zero: find zero crossing point
+        const t0 = Math.abs(fi) / (Math.abs(fi) + Math.abs(fj));
+        const pMid = p1.clone().lerp(p2.clone(), t0);
+        const d1c = p1.clone().addScaledVector(perp, hi);
+        const d2c = p2.clone().addScaledVector(perp, hj);
+        drawDiagramFace(scene, p1, pMid, d1c, pMid.clone(), fi >= 0 ? COL_POS : COL_NEG);
+        drawDiagramFace(scene, pMid, p2, pMid.clone(), d2c, fj >= 0 ? COL_POS : COL_NEG);
+      }
+    }
+
+    // Outline
+    const outlineGeo = new THREE.BufferGeometry().setFromPoints([p1, d1, d2, p2]);
+    scene.add(new THREE.Line(outlineGeo, new THREE.LineBasicMaterial({
+      color: isLight() ? 0x333333 : 0xcccccc, linewidth: 1
+    })));
+
+    // Value labels at both ends
+    addTextSprite(scene, fi.toFixed(1), d1, maxDim);
+    addTextSprite(scene, fj.toFixed(1), d2, maxDim);
+  }
+}
+
+function drawDiagramFace(scene: THREE.Scene, p1: THREE.Vector3, p2: THREE.Vector3,
+  d1: THREE.Vector3, d2: THREE.Vector3, color: number) {
+  const verts = [
+    p1.x, p1.y, p1.z,
+    d1.x, d1.y, d1.z,
+    d2.x, d2.y, d2.z,
+    p1.x, p1.y, p1.z,
+    d2.x, d2.y, d2.z,
+    p2.x, p2.y, p2.z,
+  ];
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({
+    color, side: THREE.DoubleSide, transparent: true, opacity: 0.55
+  });
+  scene.add(new THREE.Mesh(geo, mat));
+}
+
+function addTextSprite(scene: THREE.Scene, text: string, position: THREE.Vector3, maxDim: number) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d')!;
+  canvas.width = 128; canvas.height = 32;
+  ctx.font = 'bold 18px monospace';
+  ctx.fillStyle = isLight() ? '#222' : '#eee';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, 64, 22);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+  const sprite = new THREE.Sprite(mat);
+  sprite.position.copy(position);
+  const s = maxDim * 0.06;
+  sprite.scale.set(s * 4, s, 1);
+  scene.add(sprite);
+}
+
+// ═══════════════════════════════════════════════════
+//  NODES, SUPPORTS, LOADS
+// ═══════════════════════════════════════════════════
+
+function addNodes(scene: THREE.Scene, nodes: number[][], color: number, maxDim: number) {
+  const radius = maxDim * 0.015;
+  const sphereGeo = new THREE.SphereGeometry(radius, 8, 8);
+  const mat = new THREE.MeshPhongMaterial({ color });
+  for (const [x, y, z] of nodes) {
+    const sphere = new THREE.Mesh(sphereGeo, mat);
+    sphere.position.set(x, y || 0, z || 0);
+    scene.add(sphere);
+  }
+}
+
 function addSupports(scene: THREE.Scene, nodes: number[][], supports: number[], maxDim: number) {
   const sz = maxDim * 0.04;
-  const mat = new THREE.MeshPhongMaterial({ color: 0xee3333 });
+  const mat = new THREE.MeshPhongMaterial({ color: 0x9b2226 });
   for (const idx of supports) {
     const n = nodes[idx - 1];
     if (!n) continue;
     const box = new THREE.Mesh(new THREE.BoxGeometry(sz, sz, sz), mat);
-    box.position.set(n[0], n[1] || 0, (n[2] || 0) - sz/2);
+    box.position.set(n[0], n[1] || 0, (n[2] || 0) - sz / 2);
     scene.add(box);
   }
 }
 
-// ── Loads (orange arrows) ──
 function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxDim: number) {
   for (const [idx, fx, fy, fz] of loads) {
     const n = nodes[idx - 1];
@@ -221,11 +393,14 @@ function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxD
     if (mag < 1e-10) continue;
     dir.normalize();
     const arrowLen = maxDim * 0.2;
-    scene.add(new THREE.ArrowHelper(dir, origin, arrowLen, 0xffa726, arrowLen * 0.2, arrowLen * 0.1));
+    scene.add(new THREE.ArrowHelper(dir, origin, arrowLen, 0xee9b00, arrowLen * 0.2, arrowLen * 0.1));
   }
 }
 
-// ── Contour colors ──
+// ═══════════════════════════════════════════════════
+//  CONTOUR, LEGEND, GRID, AXES, DEFORM
+// ═══════════════════════════════════════════════════
+
 function addContour(scene: THREE.Scene, nodes: number[][], elements: number[][], values: number[]) {
   let vMin = Infinity, vMax = -Infinity;
   for (const v of values) { if (v < vMin) vMin = v; if (v > vMax) vMax = v; }
@@ -233,11 +408,8 @@ function addContour(scene: THREE.Scene, nodes: number[][], elements: number[][],
 
   for (const el of elements) {
     if (el.length < 2) continue;
-
     if (el.length === 2) {
-      // Line element — color by average
-      const pts: THREE.Vector3[] = [];
-      const cols: number[] = [];
+      const pts: THREE.Vector3[] = [], cols: number[] = [];
       for (const idx of el) {
         const n = nodes[idx - 1];
         if (!n) continue;
@@ -248,10 +420,8 @@ function addContour(scene: THREE.Scene, nodes: number[][], elements: number[][],
       }
       const geo = new THREE.BufferGeometry().setFromPoints(pts);
       geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
-      const mat = new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 3 });
-      scene.add(new THREE.Line(geo, mat));
+      scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true, linewidth: 3 })));
     } else {
-      // Shell element — colored face
       const verts: number[] = [], cols: number[] = [];
       const idxs = el.length === 3 ? [0,1,2] : [0,1,2, 0,2,3];
       for (const li of idxs) {
@@ -267,13 +437,11 @@ function addContour(scene: THREE.Scene, nodes: number[][], elements: number[][],
       geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
       geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
       geo.computeVertexNormals();
-      const mat = new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide });
-      scene.add(new THREE.Mesh(geo, mat));
+      scene.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide })));
     }
   }
 }
 
-// ── Legend ──
 function addLegend(container: HTMLDivElement, values: number[]) {
   let vMin = Infinity, vMax = -Infinity;
   for (const v of values) { if (v < vMin) vMin = v; if (v > vMax) vMax = v; }
@@ -294,7 +462,6 @@ function addLegend(container: HTMLDivElement, values: number[]) {
   container.appendChild(labelMin);
 }
 
-// ── Deformed nodes ──
 function getDeformedNodes(nodes: number[][], U: number[], dofPerNode: number, scale: number): number[][] {
   return nodes.map((n, i) => {
     const base = i * dofPerNode;

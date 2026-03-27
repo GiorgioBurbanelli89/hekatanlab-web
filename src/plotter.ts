@@ -370,7 +370,7 @@ function render2DCanvas(data: PlotData, W: number, H: number): HTMLCanvasElement
       ctx.beginPath(); ctx.arc(toX(x[i]), toY(y[i]), 4, 0, Math.PI * 2); ctx.fill();
     }
   } else {
-    // Line plot
+    // Line plot with markers
     ctx.strokeStyle = hexColor;
     ctx.lineWidth = data.lineWidth || 2;
     ctx.lineJoin = 'round';
@@ -380,6 +380,20 @@ function render2DCanvas(data: PlotData, W: number, H: number): HTMLCanvasElement
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.stroke();
+    // Draw circle markers at each data point (like MATLAB)
+    if (x.length <= 100) {
+      ctx.fillStyle = hexColor;
+      for (let i = 0; i < x.length; i++) {
+        const px = toX(x[i]), py = toY(y[i]);
+        ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
+        // White outline for visibility
+        ctx.strokeStyle = getBgHex();
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.strokeStyle = hexColor;
+        ctx.lineWidth = data.lineWidth || 2;
+      }
+    }
   }
 
   // Title

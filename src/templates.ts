@@ -607,6 +607,106 @@ Fr = subvec(Fv, free)
 Ur = inv(Kr) * Fr
 Uf = fullvec(Ur, free, nDof)` },
 
+  { name: 'FEM — Frame 2D + Diagramas N/V/M', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Frame 2D — Portal con diagramas N, V, M
+% (Pórtico simple: 2 columnas + 1 viga)
+% ═══════════════════════════════════════════
+
+% Propiedades (kN, m)
+E = 200e6;
+A = 0.01;
+I_sec = 8.33e-5;
+
+% Nodos [x, y, z]
+nds = [0,0,0; 0,0,4; 6,0,4; 6,0,0]
+els = [1,2; 2,3; 3,4]
+show3d(nds, els, "Portal 2D", [1,4], [[2,10,0,0]])
+
+% DOFs: 3/nodo (ux, uz, ry) → 12 total
+nDof = 12;
+Kg = zeros(nDof, nDof);
+
+% Ensamblaje con for
+nElem = 3;
+dofMap = [1,2,3,4,5,6; 4,5,6,7,8,9; 7,8,9,10,11,12]
+
+for e = range(1, nElem, 1)
+  n1 = els(e,1);
+  n2 = els(e,2);
+  dx = nds(n2,1) - nds(n1,1);
+  dz = nds(n2,3) - nds(n1,3);
+  Le = sqrt(dx^2 + dz^2);
+
+  % Rigidez local
+  Ke = k_frame2d(E, A, I_sec, Le);
+
+  % Transformacion
+  c = dx / Le;
+  s = dz / Le;
+  T = [c,s,0,0,0,0; -s,c,0,0,0,0; 0,0,1,0,0,0; 0,0,0,c,s,0; 0,0,0,-s,c,0; 0,0,0,0,0,1];
+
+  % Ensamblar Ke_global = T' * Ke * T
+  Keg = transpose(T) * Ke * T;
+  d = [dofMap(e,1), dofMap(e,2), dofMap(e,3), dofMap(e,4), dofMap(e,5), dofMap(e,6)];
+  Kg = assemble(Kg, Keg, d);
+end
+
+% Carga: Fx = 10 kN en nodo 2
+Fv = zeros(nDof, 1);
+Fv(4) = 10
+
+% BC: nodos 1 y 4 empotrados (DOFs 1,2,3,10,11,12)
+fixed = [1, 2, 3, 10, 11, 12]
+free = freedofs(nDof, fixed)
+Kr = submat(Kg, free)
+Fr = subvec(Fv, free)
+Ur = inv(Kr) * Fr
+Uf = fullvec(Ur, free, nDof)
+
+% Deformada
+show_deformed(nds, els, Uf, 200, 3, "Deformada (200x)")
+
+% ── Fuerzas internas por elemento ──
+fAll = zeros(nElem, 6)
+for e = range(1, nElem, 1)
+  n1 = els(e,1);
+  n2 = els(e,2);
+  dx = nds(n2,1) - nds(n1,1);
+  dz = nds(n2,3) - nds(n1,3);
+  Le = sqrt(dx^2 + dz^2);
+  Ke = k_frame2d(E, A, I_sec, Le);
+  c = dx / Le;
+  s = dz / Le;
+  T = [c,s,0,0,0,0; -s,c,0,0,0,0; 0,0,1,0,0,0; 0,0,0,c,s,0; 0,0,0,-s,c,0; 0,0,0,0,0,1];
+  d = [dofMap(e,1), dofMap(e,2), dofMap(e,3), dofMap(e,4), dofMap(e,5), dofMap(e,6)];
+  ue = subvec(Uf, d);
+  fLocal = frame_forces(Ke, T, ue);
+  fAll(e, 1) = fLocal(1);
+  fAll(e, 2) = fLocal(2);
+  fAll(e, 3) = fLocal(3);
+  fAll(e, 4) = fLocal(4);
+  fAll(e, 5) = fLocal(5);
+  fAll(e, 6) = fLocal(6);
+end
+
+% Extraer N, V, M por elemento → [fi, fj]
+Nf = zeros(nElem, 2);
+Vf = zeros(nElem, 2);
+Mf = zeros(nElem, 2);
+for e = range(1, nElem, 1)
+  Nf(e,1) = -fAll(e,1);
+  Nf(e,2) = fAll(e,4);
+  Vf(e,1) = fAll(e,2);
+  Vf(e,2) = -fAll(e,5);
+  Mf(e,1) = -fAll(e,3);
+  Mf(e,2) = fAll(e,6);
+end
+
+% Diagramas
+show_diagram(nds, els, Nf, "constant", "Axial Force (N)")
+show_diagram(nds, els, Vf, "constant", "Shear Force (V)")
+show_diagram(nds, els, Mf, "linear", "Bending Moment (M)")` },
+
   // ══════════════════════════════════════════
   // Column Buckling (Ormonde)
   // ══════════════════════════════════════════

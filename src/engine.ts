@@ -413,6 +413,53 @@ export function createEngine() {
       });
     });
 
+    // show_diagram(nodes, elements, elemForces, type, title)
+    // elemForces: matrix [nElem x 2] with [fi, fj] per element
+    // type: "constant" (N, V) or "linear" (M)
+    p.set('show_diagram', (...args: any[]) => {
+      const nodes = toArray2DArg(args[0]);
+      const elements = toArray2DArg(args[1]);
+      const ef = toArray2DArg(args[2]); // [[fi,fj], ...]
+      const dtype = (typeof args[3] === 'string') ? args[3] : 'linear';
+      const title = (typeof args[4] === 'string') ? args[4] : (dtype === 'linear' ? 'Bending Moment' : 'Forces');
+      return new ViewCommand({
+        type: 'diagram', nodes, elements,
+        title,
+        diagram: {
+          elemForces: ef,
+          type: dtype === 'constant' ? 'constant' : 'linear',
+          label: dtype === 'constant' ? 'N' : 'M'
+        }
+      });
+    });
+
+    // frame_forces(Ke_local, T, Ue_global) — compute internal forces for a frame element
+    // Returns local force vector: [N1, V1, M1, N2, V2, M2] for 2D frame (6 DOF)
+    p.set('frame_forces', (Ke: any, T: any, Ue: any) => {
+      const ke = (typeof Ke.toArray === 'function') ? math.matrix(Ke) : Ke;
+      const t = (typeof T.toArray === 'function') ? math.matrix(T) : T;
+      const ue = (typeof Ue.toArray === 'function') ? math.matrix(Ue) : Ue;
+      // f_local = Ke * T * ue
+      const uLocal = math.multiply(t, ue);
+      const fLocal = math.multiply(ke, uLocal);
+      return fLocal;
+    });
+
+    // extract_NVM(fLocal, nElem) — extract N, V, M from force vectors for all elements
+    // fLocal: matrix [nElem x 6] each row = [N1,V1,M1,N2,V2,M2]
+    // Returns: {N: [nElem x 2], V: [nElem x 2], M: [nElem x 2]}
+    p.set('extract_NVM', (fLocal: any) => {
+      const fl = toArray2DArg(fLocal);
+      const N: number[][] = [], V: number[][] = [], M: number[][] = [];
+      for (const row of fl) {
+        // Convention: [N1,V1,M1,N2,V2,M2]
+        N.push([-row[0], row[3]]);     // axial (tension positive)
+        V.push([row[1], -row[4]]);     // shear
+        M.push([-row[2], row[5]]);     // moment
+      }
+      return { N: math.matrix(N), V: math.matrix(V), M: math.matrix(M) };
+    });
+
     // freedofs(ndof, fixed_array) — returns complement DOF indices (1-based)
     p.set('freedofs', (ndof: number, fixed: any) => {
       let f: number[];
@@ -836,7 +883,8 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
-      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
+      'show3d','show_deformed','show_contour','show_diagram','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
+      'frame_forces','extract_NVM',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',
