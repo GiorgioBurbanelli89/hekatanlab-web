@@ -138,11 +138,17 @@ export function createEngine() {
           try { registerFunction(f, subParser); } catch {}
         }
       }
-      // Register builtins (_idx, _setidx, assemble, etc.)
+      // Register builtins (_idx, _setidx, assemble, size, length, etc.)
       loadFemFunctions(subParser);
-      subParser.set('_idx', p.get('_idx'));
-      subParser.set('_setidx', p.get('_setidx'));
-      try { subParser.set('disp', p.get('disp')); } catch {}
+      // Copy ALL registered functions from parent parser
+      try {
+        const parentScope = p.getAll();
+        for (const [k, v] of Object.entries(parentScope)) {
+          if (typeof v === 'function') {
+            try { subParser.set(k, v); } catch {}
+          }
+        }
+      } catch {}
 
       // Parse body as blocks (supports for/while/if)
       const bodyLines = fn.body.split('\n').map((t: string, i: number) => ({ text: t, startLine: i }));
