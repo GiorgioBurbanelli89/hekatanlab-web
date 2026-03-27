@@ -1054,7 +1054,7 @@ export function createEngine() {
           if (kw === 'end' || kw === 'endfunction' || kw === 'clc' || kw === 'clear' || kw === 'clear all') continue;
           const { expr, suppress } = prepExpr(trimmed);
           if (!expr) continue;
-          if (insideLoop && trimmed.includes('assemble')) console.log('[DBG] for-body prepExpr:', trimmed, '→', expr);
+          if (insideLoop) console.log('[DBG-FOR]', trimmed, '→', expr);
           evalOneLine(stmt.text, stmt.startLine, suppress, expr);
 
         } else if (stmt.kind === 'for') {
@@ -1078,6 +1078,7 @@ export function createEngine() {
             }
             let iter = 0;
             insideLoop++;
+            console.log('[DBG-FOR] loop var:', stmt.varName, 'values:', values, 'body stmts:', stmt.body.length, stmt.body.map((s:any) => s.kind + ':' + (s.text||'').substring(0,30)));
             for (const v of values) {
               if (++iter > MAX_ITER) { results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: 'Max iterations exceeded' }); break; }
               parser.set(stmt.varName, v);
