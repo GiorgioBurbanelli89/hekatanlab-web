@@ -601,6 +601,96 @@ els = [1,3; 2,4; 3,5; 4,5; 6,8; 7,9; 8,10; 9,10; 3,8; 4,9; 5,10]
 
 show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
 
+  { name: 'FEM — Shell Tri (placa)', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Shell Triangular 18 DOF — Placa con carga
+% Derivacion: Membrana + DKT Bending + Shear
+% (equivalente a awatif plate example)
+% ═══════════════════════════════════════════
+
+E = 100;
+nu = 0.3;
+t_plate = 1;
+
+% ══ PASO 1: Malla rectangular 2x2 → 9 nodos, 8 triangulos ══
+Lx = 15; Ly = 10;
+nds = meshRect_nodes(Lx, Ly, 2, 2)
+els = meshRect_cst(2, 2)
+show3d(nds, els, "Placa Shell Tri (2x2)")
+
+% ══ PASO 2: Funciones de forma (membrana CST) ══
+% N1 = 1 - xi - eta,  N2 = xi,  N3 = eta
+% B_membrana = f(dN/dx, dN/dy) → 3x6 (exx, eyy, gxy)
+disp("--- Membrana: CST con drilling DOF ---")
+disp("N1=1-xi-eta, N2=xi, N3=eta")
+
+% ══ PASO 3: Funciones de forma (DKT bending) ══
+% DKT: Discrete Kirchhoff Triangle
+% 9 DOFs de flexion: w1,thetax1,thetay1, w2,thetax2,thetay2, w3,thetax3,thetay3
+% Bb(3x9) relaciona curvaturas [kxx,kyy,kxy] con DOFs de flexion
+disp("--- Flexion: DKT (Discrete Kirchhoff Triangle) ---")
+disp("Curvatura: [kxx; kyy; 2*kxy] = Bb * [w,thx,thy]_nodos")
+
+% ══ PASO 4: Matrices constitutivas ══
+% Db (bending): E*t^3/(12*(1-nu^2)) * [1,nu,0; nu,1,0; 0,0,(1-nu)/2]
+% Ds (shear): kappa*G*t * [1,0; 0,1],  kappa=5/6, G=E/(2*(1+nu))
+Db_coeff = E * t_plate^3 / (12 * (1 - nu^2))
+Db = Db_coeff * [1, nu, 0; nu, 1, 0; 0, 0, (1 - nu) / 2]
+G = E / (2 * (1 + nu))
+kappa = 5/6
+Ds = kappa * G * t_plate * [1, 0; 0, 1]
+
+% ══ PASO 5: Rigidez elemento 1 (18x18) ══
+disp("--- K_shell = K_membrana(9x9) + K_bending(9x9) + K_shear(9x9) ---")
+disp("--- Ensamblado en 18x18: [ux,uy,uz,rx,ry,rz] por nodo ---")
+n1 = 1; n2 = 2; n3 = 3;
+Ke = k_shell_tri(E, nu, t_plate, nds(n1,1),nds(n1,2), nds(n2,1),nds(n2,2), nds(n3,1),nds(n3,2))
+disp("Ke(18x18) para elemento 1:")
+Ke
+
+% ══ PASO 6: Ensamblaje global ══
+nNod = 9; nDof = nNod * 6;
+Kg = zeros(nDof, nDof);
+nElem = 8;
+for e = range(1, nElem, 1)
+  n1 = els(e,1); n2 = els(e,2); n3 = els(e,3);
+  Ke = k_shell_tri(E, nu, t_plate, nds(n1,1),nds(n1,2), nds(n2,1),nds(n2,2), nds(n3,1),nds(n3,2));
+  d1 = (n1-1)*6; d2 = (n2-1)*6; d3 = (n3-1)*6;
+  d = [d1+1,d1+2,d1+3,d1+4,d1+5,d1+6, d2+1,d2+2,d2+3,d2+4,d2+5,d2+6, d3+1,d3+2,d3+3,d3+4,d3+5,d3+6];
+  Kg = assemble(Kg, Ke, d);
+end
+
+% ══ PASO 7: BC — bordes empotrados ══
+% Nodos del borde: 1,2,3,4,6,7 (todos menos 5,8,9 interiores)
+bnd = [1,2,3,4,6,7]
+fixed = [];
+for i = range(1, 6, 1)
+  nb = bnd(i);
+  d0 = (nb - 1) * 6;
+  fixed = [fixed, d0+1, d0+2, d0+3, d0+4, d0+5, d0+6];
+end
+
+% ══ PASO 8: Carga — Fz en todos los nodos ══
+Fv = zeros(nDof, 1);
+Pz = -3;
+for i = range(1, nNod, 1)
+  Fv((i-1)*6 + 3) = Pz;
+end
+Fv
+
+% ══ PASO 9: Resolver ══
+free = freedofs(nDof, fixed)
+Kr = submat(Kg, free)
+Fr = subvec(Fv, free)
+Ur = inv(Kr) * Fr
+Uf = fullvec(Ur, free, nDof)
+
+% Desplazamiento vertical nodo 5 (centro)
+disp("Uz nodo 5 (centro):")
+disp(Uf(27))
+
+% ══ PASO 10: Deformada ══
+show_deformed(nds, els, Uf, 5, 6, "Deformada Shell (5x)")` },
+
   { name: 'FEM — Placa CST', category: 'FEM', code: `% ═══════════════════════════════════════════
 % FEM: Triangulo CST (Constant Strain Triangle)
 % Plane Stress — derivacion desde cero
