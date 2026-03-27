@@ -293,4 +293,120 @@ for j = range(0, ny, 1)
 end`
   },
 
+  // ═══════════════════════════════════════
+  // SOLVER UTILITIES (equivalentes a deform.ts)
+  // Estas reemplazan las funciones TypeScript ocultas
+  // ═══════════════════════════════════════
+
+  {
+    name: 'freedofs',
+    params: ['nDof', 'fixed'],
+    description: 'DOFs libres: complemento de los DOFs fijos (1-based)',
+    body: `% fixed = vector con DOFs restringidos (1-based)
+% Retorna vector con DOFs no restringidos
+result = []
+for i = range(1, nDof, 1)
+  es_fijo = 0
+  for j = range(1, length(fixed), 1)
+    if fixed(j) == i
+      es_fijo = 1
+    end
+  end
+  if es_fijo == 0
+    result = [result, i]
+  end
+end`
+  },
+
+  {
+    name: 'submat',
+    params: ['K', 'dofs'],
+    description: 'Submatriz: extrae filas y columnas de K en DOFs dados (1-based)',
+    body: `% K = matriz global, dofs = indices a extraer
+n = length(dofs)
+Ksub = zeros(n, n)
+for i = range(1, n, 1)
+  for j = range(1, n, 1)
+    Ksub(i, j) = K(dofs(i), dofs(j))
+  end
+end`
+  },
+
+  {
+    name: 'subvec',
+    params: ['F', 'dofs'],
+    description: 'Subvector: extrae componentes de F en DOFs dados (1-based)',
+    body: `% F = vector global, dofs = indices a extraer
+n = length(dofs)
+Fsub = zeros(n, 1)
+for i = range(1, n, 1)
+  Fsub(i) = F(dofs(i))
+end`
+  },
+
+  {
+    name: 'fullvec',
+    params: ['Ur', 'free', 'nTotal'],
+    description: 'Vector completo: expande solucion reducida a vector total',
+    body: `% Ur = solucion reducida, free = DOFs libres, nTotal = tamaño total
+Ufull = zeros(nTotal, 1)
+n = length(free)
+for i = range(1, n, 1)
+  Ufull(free(i)) = Ur(i)
+end`
+  },
+
+  {
+    name: 'assemble_k',
+    params: ['Kg', 'Ke', 'dofs'],
+    description: 'Ensamblaje: suma Ke en Kg en posiciones de DOFs (1-based)',
+    body: `% Kg = global, Ke = elemento, dofs = mapeo DOF global
+n = length(dofs)
+for i = range(1, n, 1)
+  for j = range(1, n, 1)
+    gi = dofs(i)
+    gj = dofs(j)
+    Kg(gi, gj) = Kg(gi, gj) + Ke(i, j)
+  end
+end`
+  },
+
+  {
+    name: 'frame_forces',
+    params: ['Ke', 'T', 'ue'],
+    description: 'Fuerzas internas: f_local = Ke * T * u_global',
+    body: `% Ke = rigidez local, T = transformacion, ue = desplaz. globales del elem.
+% Retorna vector de fuerzas en coordenadas locales
+u_local = T * ue
+f_local = Ke * u_local`
+  },
+
+  {
+    name: 'solve_fem',
+    params: ['Kg', 'Fv', 'fixed'],
+    description: 'Solver FEM completo: aplica BC, resuelve, expande (deform.ts en MATLAB)',
+    body: `% Kg = rigidez global, Fv = fuerzas, fixed = DOFs fijos
+% Retorna: Uf = desplazamientos completos
+%
+% Esto es EXACTAMENTE lo que hace deform.ts de awatif:
+% 1. Identificar DOFs libres
+% 2. Extraer submatriz y subvector
+% 3. Resolver sistema lineal
+% 4. Expandir solucion
+nDof = size(Kg, 1)
+free = freedofs(nDof, fixed)
+Kr = submat(Kg, free)
+Fr = subvec(Fv, free)
+Ur = inv(Kr) * Fr
+Uf = fullvec(Ur, free, nDof)`
+  },
+
+  {
+    name: 'reactions',
+    params: ['Kg', 'Uf'],
+    description: 'Reacciones: R = K * U (fuerzas en apoyos)',
+    body: `% Kg = rigidez global, Uf = desplazamientos completos
+R = Kg * Uf`
+  },
+
 ];

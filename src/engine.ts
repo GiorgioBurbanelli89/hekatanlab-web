@@ -893,6 +893,7 @@ export function createEngine() {
       'T2d_truss','truss2d_Ke','truss3d_Ke',
       'meshRect_nodes','meshRect_cst','gen_truss_nodes','gen_truss_elements',
       'gen_tower_nodes','gen_tower_elements','fixed_left_edge',
+      'assemble_k','solve_fem','reactions',
       'show3d','show_deformed','show_contour','show_diagram','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
       'frame_forces','extract_NVM',
       'random','factorial','permutations','combinations','gcd','lcm',

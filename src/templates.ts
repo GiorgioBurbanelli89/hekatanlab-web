@@ -287,18 +287,23 @@ Kv = rigidez_viga(200000, 8.33e-6, 3)` },
 % gen_tower_nodes(bx,by,bz,divs) → torre 3D
 % gen_tower_elements(divs)     → torre 3D
 
-% ── UTILIDADES ─────────────────────────────
-% assemble(Kg, Ke, dofs)       → ensamblaje
+% ── SOLVER (equivale a deform.ts) ─────────
 % freedofs(nDof, fixed)        → DOFs libres
 % submat(K, dofs)              → submatriz
 % subvec(F, dofs)              → subvector
 % fullvec(Ur, free, nTotal)    → vector completo
+% assemble_k(Kg, Ke, dofs)     → ensamblaje
+% solve_fem(Kg, Fv, fixed)     → solver completo!
+% reactions(Kg, Uf)            → reacciones
+% frame_forces(Ke, T, ue)      → fuerzas internas
 
 % ── VISUALIZACIÓN ──────────────────────────
 % show3d(nds, els, titulo, apoyos, cargas)
 % show_deformed(nds, els, U, escala, dofNodo, titulo)
 % show_contour(nds, els, valores, titulo)
 % show_diagram(nds, els, fuerzas, tipo, titulo)
+
+% ✅ Todas en MATLAB puro — ver codigo: boton 📚
 
 % ── EJEMPLO RÁPIDO ────────────────────────
 E = 200e3; A = 0.01; I_s = 8.33e-5; L = 4
