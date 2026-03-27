@@ -258,6 +258,59 @@ end
 
 Kv = rigidez_viga(200000, 8.33e-6, 3)` },
 
+  // ── Referencia: Funciones MATLAB FEM disponibles ──
+  { name: '📚 Funciones FEM (referencia)', category: 'FEM', code: `% ═══════════════════════════════════════════
+% 📚 FUNCIONES FEM DISPONIBLES
+% Todas escritas en MATLAB puro
+% Ver código: clic en botón 📚
+% ═══════════════════════════════════════════
+
+% ── RIGIDEZ LOCAL ──────────────────────────
+% k_truss2d(E, A, L)          → 4x4 truss 2D
+% k_frame2d(E, A, I, L)       → 6x6 frame 2D
+% k_frame3d(E,G,A,Iy,Iz,J,L)  → 12x12 frame 3D
+% k_cst(E,nu,t, x1,y1,x2,y2,x3,y3) → 6x6 CST
+
+% ── TRANSFORMACIÓN ─────────────────────────
+% T2d(c, s)         → 6x6 frame 2D
+% T2d_truss(c, s)   → 4x4 truss 2D
+
+% ── RIGIDEZ GLOBAL (con T) ─────────────────
+% truss2d_Ke(E,A,Le,c,s)      → 4x4 truss global
+% truss3d_Ke(E,A,Le,lx,ly,lz) → 6x6 truss 3D
+
+% ── MALLA ──────────────────────────────────
+% meshRect_nodes(Lx,Ly,nx,ny)  → nodos rectang.
+% meshRect_cst(nx,ny)          → elementos CST
+% gen_truss_nodes(span,divs,h) → nodos Pratt
+% gen_truss_elements(divs)     → elementos Pratt
+% gen_tower_nodes(bx,by,bz,divs) → torre 3D
+% gen_tower_elements(divs)     → torre 3D
+
+% ── UTILIDADES ─────────────────────────────
+% assemble(Kg, Ke, dofs)       → ensamblaje
+% freedofs(nDof, fixed)        → DOFs libres
+% submat(K, dofs)              → submatriz
+% subvec(F, dofs)              → subvector
+% fullvec(Ur, free, nTotal)    → vector completo
+
+% ── VISUALIZACIÓN ──────────────────────────
+% show3d(nds, els, titulo, apoyos, cargas)
+% show_deformed(nds, els, U, escala, dofNodo, titulo)
+% show_contour(nds, els, valores, titulo)
+% show_diagram(nds, els, fuerzas, tipo, titulo)
+
+% ── EJEMPLO RÁPIDO ────────────────────────
+E = 200e3; A = 0.01; I_s = 8.33e-5; L = 4
+
+% Rigidez frame 2D (función MATLAB)
+Ke = k_frame2d(E, A, I_s, L)
+
+% Malla rectangular CST
+nds = meshRect_nodes(10, 5, 3, 2)
+els = meshRect_cst(3, 2)
+show3d(nds, els, "Malla CST 3x2")` },
+
   // ── Mecánica Computacional ──
   { name: 'FEM — Barra axial', category: 'FEM', code: `% ═══════════════════════════════════════════
 % FEM: Barra axial paso a paso

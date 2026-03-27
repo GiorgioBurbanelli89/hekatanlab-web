@@ -2,6 +2,7 @@ import * as math from 'mathjs';
 import { PlotCommand } from './plotter';
 import { ViewCommand } from './viewer3d';
 import { k_truss2d, k_frame2d, k_frame3d, T2d, T3d, assemble, k_cst, k_q4 } from './fem';
+import { femMatlabLibrary } from './fem-matlab';
 // @ts-ignore
 import nerdamer from 'nerdamer';
 // @ts-ignore
@@ -714,8 +715,14 @@ export function createEngine() {
       throw new Error(`_idx requires 1 or 2 indices`);
     });
 
-    // 3. Register all functions (from code + localStorage)
+    // 3. Register all functions (from code + localStorage + FEM MATLAB library)
     userFunctions = new Map([...codeFunctions]);
+    // Pre-load FEM MATLAB library (user can see them in 📚 panel)
+    for (const mf of femMatlabLibrary) {
+      if (!userFunctions.has(mf.name)) {
+        userFunctions.set(mf.name, mf);
+      }
+    }
     const storedFns = loadFunctions();
     for (const sf of storedFns) {
       if (!userFunctions.has(sf.name)) userFunctions.set(sf.name, sf);
@@ -883,6 +890,9 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
+      'T2d_truss','truss2d_Ke','truss3d_Ke',
+      'meshRect_nodes','meshRect_cst','gen_truss_nodes','gen_truss_elements',
+      'gen_tower_nodes','gen_tower_elements','fixed_left_edge',
       'show3d','show_deformed','show_contour','show_diagram','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
       'frame_forces','extract_NVM',
       'random','factorial','permutations','combinations','gcd','lcm',
