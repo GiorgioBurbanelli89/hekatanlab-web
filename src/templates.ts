@@ -708,6 +708,359 @@ show_diagram(nds, els, Vf, "constant", "Shear Force (V)")
 show_diagram(nds, els, Mf, "linear", "Bending Moment (M)")` },
 
   // ══════════════════════════════════════════
+  // Awatif v2.0.0 Examples (converted to MATLAB)
+  // All functions shown desglosadas (user sees the code)
+  // ══════════════════════════════════════════
+
+  { name: 'Awatif — Truss Paramétrico', category: 'Awatif', code: `% ═══════════════════════════════════════════
+% Truss Paramétrico (awatif v2.0.0 truss example)
+% Cercha Pratt con diagonales alternadas
+% Funciones MATLAB desglosadas
+% ═══════════════════════════════════════════
+
+% ─────────────────────────────────────────
+% Función: generar malla de truss Pratt
+% ─────────────────────────────────────────
+function [nds] = gen_truss_nodes(span, divs, h)
+  dx = span / divs;
+  nNodes = 2 * (divs + 1);
+  nds = zeros(nNodes, 3);
+  for i = range(0, divs, 1)
+    nds(i+1, 1) = dx * i;
+  end
+  for i = range(0, divs, 1)
+    nds(divs + 2 + i, 1) = dx * i;
+    nds(divs + 2 + i, 3) = h;
+  end
+end
+
+function [els] = gen_truss_elements(divs)
+  nElem = divs * 3 + divs + 1;
+  els = zeros(nElem, 2);
+  e = 1;
+  % Cuerda inferior
+  for i = range(1, divs, 1)
+    els(e,1) = i; els(e,2) = i+1; e = e+1;
+  end
+  % Cuerda superior
+  for i = range(1, divs, 1)
+    els(e,1) = divs+1+i; els(e,2) = divs+2+i; e = e+1;
+  end
+  % Montantes verticales
+  for i = range(1, divs+1, 1)
+    els(e,1) = i; els(e,2) = divs+1+i; e = e+1;
+  end
+  % Diagonales (Pratt)
+  for i = range(0, divs-1, 1)
+    if i < divs/2
+      els(e,1) = i+1; els(e,2) = divs+3+i;
+    else
+      els(e,1) = divs+2+i; els(e,2) = i+2;
+    end
+    e = e+1;
+  end
+end
+
+% ─────────────────────────────────────────
+% Función: rigidez de truss 2D
+% ─────────────────────────────────────────
+function [Ke] = truss2d_Ke(E, A, Le, c, s)
+  ke = E * A / Le;
+  Kl = ke * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0];
+  T = [c,s,0,0; -s,c,0,0; 0,0,c,s; 0,0,-s,c];
+  Ke = transpose(T) * Kl * T;
+end
+
+% ─────────────────────────────────────────
+% Función: ensamblaje de truss 2D
+% ─────────────────────────────────────────
+function [Kg] = assemble_truss2d(nds, els, nElem, nDof, E, A)
+  Kg = zeros(nDof, nDof);
+  for e = range(1, nElem, 1)
+    n1 = els(e,1); n2 = els(e,2);
+    dx = nds(n2,1) - nds(n1,1);
+    dz = nds(n2,3) - nds(n1,3);
+    Le = sqrt(dx^2 + dz^2);
+    c = dx/Le; s = dz/Le;
+    Ke = truss2d_Ke(E, A, Le, c, s);
+    d = [2*n1-1, 2*n1, 2*n2-1, 2*n2];
+    Kg = assemble(Kg, Ke, d);
+  end
+end
+
+% ═══════════════════════════════════════════
+% PROGRAMA PRINCIPAL
+% ═══════════════════════════════════════════
+
+% Parámetros
+span = 15;
+divisions = 5;
+height = 2;
+Emod = 10e6;
+Asec = 10e-4;
+Pload = 250;
+
+% Generar malla
+nds = gen_truss_nodes(span, divisions, height)
+els = gen_truss_elements(divisions)
+nNodes = size(nds, 1);
+nElem = size(els, 1);
+
+show3d(nds, els, "Truss Pratt", [1, divisions+1])
+
+% Ensamblar
+nDof = nNodes * 2;
+Kg = assemble_truss2d(nds, els, nElem, nDof, Emod, Asec)
+
+% Cargas verticales en nodos inferiores
+Fv = zeros(nDof, 1);
+for i = range(1, divisions+1, 1)
+  Fv(2*i) = -Pload;
+end
+
+% BC y solución
+fixed = [1, 2, 2*(divisions+1)-1, 2*(divisions+1)]
+free = freedofs(nDof, fixed)
+Kr = submat(Kg, free)
+Fr = subvec(Fv, free)
+Ur = inv(Kr) * Fr
+Uf = fullvec(Ur, free, nDof)
+
+show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")` },
+
+  { name: 'Awatif — Estructura 3D', category: 'Awatif', code: `% ═══════════════════════════════════════════
+% Estructura 3D (awatif v2.0.0 3d-structure)
+% Torre con vigas, columnas y diagonales
+% Funciones MATLAB desglosadas
+% ═══════════════════════════════════════════
+
+% ─────────────────────────────────────────
+% Función: generar nodos de torre 3D
+% 4 nodos por nivel en esquinas del rectángulo
+% ─────────────────────────────────────────
+function [nds] = gen_tower_nodes(bx, by, bz, divs)
+  nLev = divs + 1;
+  nNodes = 4 * nLev;
+  nds = zeros(nNodes, 3);
+  n = 1;
+  for lev = range(0, divs, 1)
+    z = bz * lev;
+    nds(n,1) = 0;  nds(n,2) = 0;  nds(n,3) = z; n = n+1;
+    nds(n,1) = bx; nds(n,2) = 0;  nds(n,3) = z; n = n+1;
+    nds(n,1) = bx; nds(n,2) = by; nds(n,3) = z; n = n+1;
+    nds(n,1) = 0;  nds(n,2) = by; nds(n,3) = z; n = n+1;
+  end
+end
+
+% ─────────────────────────────────────────
+% Función: generar elementos de torre 3D
+% Vigas perimetrales + diagonal por nivel,
+% columnas verticales, arriostramientos X
+% ─────────────────────────────────────────
+function [els] = gen_tower_elements(divs)
+  els = zeros(200, 2);
+  e = 1;
+  % Vigas (niveles 1+)
+  for lev = range(1, divs, 1)
+    b = lev*4 + 1;
+    els(e,1)=b; els(e,2)=b+1; e=e+1;
+    els(e,1)=b+1; els(e,2)=b+2; e=e+1;
+    els(e,1)=b+2; els(e,2)=b+3; e=e+1;
+    els(e,1)=b+3; els(e,2)=b; e=e+1;
+    els(e,1)=b; els(e,2)=b+2; e=e+1;
+  end
+  % Columnas
+  for i = range(0, divs-1, 1)
+    b = i*4 + 1;
+    els(e,1)=b; els(e,2)=b+4; e=e+1;
+    els(e,1)=b+1; els(e,2)=b+5; e=e+1;
+    els(e,1)=b+2; els(e,2)=b+6; e=e+1;
+    els(e,1)=b+3; els(e,2)=b+7; e=e+1;
+  end
+  % Diagonales (arriostramientos)
+  for i = range(0, divs-1, 1)
+    b = i*4 + 1;
+    els(e,1)=b; els(e,2)=b+5; e=e+1;
+    els(e,1)=b+3; els(e,2)=b+6; e=e+1;
+    els(e,1)=b; els(e,2)=b+7; e=e+1;
+    els(e,1)=b+1; els(e,2)=b+6; e=e+1;
+  end
+  % Recortar a tamaño real
+  nElem = e - 1;
+  els_out = zeros(nElem, 2);
+  for i = range(1, nElem, 1)
+    els_out(i,1) = els(i,1);
+    els_out(i,2) = els(i,2);
+  end
+  els = els_out;
+end
+
+% ─────────────────────────────────────────
+% Función: rigidez truss 3D global directa
+% K = (EA/L) * [l²,lm,ln,...; ...]
+% ─────────────────────────────────────────
+function [Ke] = truss3d_Ke(E, A, Le, lx, ly, lz)
+  ke = E * A / Le;
+  Ke = ke * [lx*lx,lx*ly,lx*lz,-lx*lx,-lx*ly,-lx*lz;
+             ly*lx,ly*ly,ly*lz,-ly*lx,-ly*ly,-ly*lz;
+             lz*lx,lz*ly,lz*lz,-lz*lx,-lz*ly,-lz*lz;
+             -lx*lx,-lx*ly,-lx*lz,lx*lx,lx*ly,lx*lz;
+             -ly*lx,-ly*ly,-ly*lz,ly*lx,ly*ly,ly*lz;
+             -lz*lx,-lz*ly,-lz*lz,lz*lx,lz*ly,lz*lz];
+end
+
+% ─────────────────────────────────────────
+% Función: ensamblaje truss 3D
+% ─────────────────────────────────────────
+function [Kg] = assemble_truss3d(nds, els, nDof, E, A)
+  nElem = size(els, 1);
+  Kg = zeros(nDof, nDof);
+  for e = range(1, nElem, 1)
+    n1 = els(e,1); n2 = els(e,2);
+    dx = nds(n2,1)-nds(n1,1);
+    dy = nds(n2,2)-nds(n1,2);
+    dz = nds(n2,3)-nds(n1,3);
+    Le = sqrt(dx^2 + dy^2 + dz^2);
+    Ke = truss3d_Ke(E, A, Le, dx/Le, dy/Le, dz/Le);
+    d = [3*n1-2, 3*n1-1, 3*n1, 3*n2-2, 3*n2-1, 3*n2];
+    Kg = assemble(Kg, Ke, d);
+  end
+end
+
+% ═══════════════════════════════════════════
+% PROGRAMA PRINCIPAL
+% ═══════════════════════════════════════════
+bx = 2; by = 2; bz = 2;
+divs = 3;
+Emod = 100; Asec = 10; loadX = 30;
+
+nds = gen_tower_nodes(bx, by, bz, divs)
+els = gen_tower_elements(divs)
+nNodes = size(nds, 1)
+nElem = size(els, 1)
+
+show3d(nds, els, "Torre 3D", [1,2,3,4])
+
+% Ensamblar K global
+nDof = nNodes * 3;
+Kg = assemble_truss3d(nds, els, nDof, Emod, Asec)
+
+% Carga Fx en nodo penúltimo
+Fv = zeros(nDof, 1);
+topNode = nNodes - 1;
+Fv(3*topNode - 2) = loadX
+
+% BC: 4 nodos base fijos
+fixed = [1,2,3, 4,5,6, 7,8,9, 10,11,12]
+free = freedofs(nDof, fixed)
+Ur = inv(submat(Kg, free)) * subvec(Fv, free)
+Uf = fullvec(Ur, free, nDof)
+
+show_deformed(nds, els, Uf, 50, 3, "Deformada (50x)")` },
+
+  { name: 'Awatif — Placa CST', category: 'Awatif', code: `% ═══════════════════════════════════════════
+% Placa CST — Plane stress (awatif v2.0.0 plate)
+% Funciones MATLAB desglosadas: meshRect, assemble_cst
+% ═══════════════════════════════════════════
+
+% ─────────────────────────────────────────
+% Función: generar malla rectangular de nodos
+% Retorna nodos en grilla (nx+1)*(ny+1)
+% ─────────────────────────────────────────
+function [nds] = meshRect_nodes(Lx, Ly, nx, ny)
+  dxx = Lx / nx;
+  dyy = Ly / ny;
+  nNodes = (nx+1) * (ny+1);
+  nds = zeros(nNodes, 3);
+  n = 1;
+  for j = range(0, ny, 1)
+    for i = range(0, nx, 1)
+      nds(n, 1) = i * dxx;
+      nds(n, 2) = j * dyy;
+      n = n + 1;
+    end
+  end
+end
+
+% ─────────────────────────────────────────
+% Función: generar elementos CST triangulares
+% 2 triángulos por cuadro de la malla
+% ─────────────────────────────────────────
+function [els] = meshRect_cst(nx, ny)
+  nElem = nx * ny * 2;
+  els = zeros(nElem, 3);
+  e = 1;
+  for j = range(0, ny-1, 1)
+    for i = range(0, nx-1, 1)
+      n1 = j*(nx+1) + i + 1;
+      n2 = n1 + 1;
+      n3 = n1 + nx + 1;
+      n4 = n3 + 1;
+      els(e,1)=n1; els(e,2)=n2; els(e,3)=n4; e=e+1;
+      els(e,1)=n1; els(e,2)=n4; els(e,3)=n3; e=e+1;
+    end
+  end
+end
+
+% ─────────────────────────────────────────
+% Función: ensamblaje de placa CST
+% ─────────────────────────────────────────
+function [Kg] = assemble_cst(nds, els, nDof, E, nu, t)
+  nElem = size(els, 1);
+  Kg = zeros(nDof, nDof);
+  for e = range(1, nElem, 1)
+    na=els(e,1); nb=els(e,2); nc=els(e,3);
+    Ke = k_cst(E, nu, t, nds(na,1), nds(na,2), nds(nb,1), nds(nb,2), nds(nc,1), nds(nc,2));
+    d = [2*na-1, 2*na, 2*nb-1, 2*nb, 2*nc-1, 2*nc];
+    Kg = assemble(Kg, Ke, d);
+  end
+end
+
+% ─────────────────────────────────────────
+% Función: DOFs del borde izquierdo (x=0)
+% ─────────────────────────────────────────
+function [fdofs] = fixed_left_edge(nx, ny)
+  fdofs = [];
+  for j = range(0, ny, 1)
+    n = j*(nx+1) + 1;
+    fdofs = [fdofs, 2*n-1, 2*n];
+  end
+end
+
+% ═══════════════════════════════════════════
+% PROGRAMA PRINCIPAL
+% ═══════════════════════════════════════════
+E = 200e3; nu = 0.3; t = 1.0;
+Lx = 10; Ly = 5; nx = 4; ny = 2;
+
+% Generar malla
+nds = meshRect_nodes(Lx, Ly, nx, ny)
+els = meshRect_cst(nx, ny)
+nNodes = size(nds, 1)
+
+show3d(nds, els, "Placa CST")
+
+% Ensamblar
+nDof = nNodes * 2;
+Kg = assemble_cst(nds, els, nDof, E, nu, t)
+
+% BC: borde izquierdo fijo
+fixed_dofs = fixed_left_edge(nx, ny)
+
+% Carga: tracción en borde derecho
+Fv = zeros(nDof, 1);
+for j = range(0, ny, 1)
+  n = j*(nx+1) + nx + 1;
+  Fv(2*n - 1) = 100;
+end
+
+free = freedofs(nDof, fixed_dofs)
+Ur = inv(submat(Kg, free)) * subvec(Fv, free)
+Uf = fullvec(Ur, free, nDof)
+
+show_deformed(nds, els, Uf, 1000, 2, "Deformada CST (1000x)")` },
+
+  // ══════════════════════════════════════════
   // Column Buckling (Ormonde)
   // ══════════════════════════════════════════
 
