@@ -397,6 +397,45 @@ export function createEngine() {
       return math.matrix(full);
     });
 
+    // Mesh generators (builtin JS — MATLAB version has for loops which registerFunction can't handle)
+    p.set('meshRect_nodes', (Lx: any, Ly: any, nx: any, ny: any) => {
+      const lx = Number(Lx), ly = Number(Ly), nxx = Number(nx), nyy = Number(ny);
+      const dx = lx / nxx, dy = ly / nyy;
+      const rows: number[][] = [];
+      for (let j = 0; j <= nyy; j++) {
+        for (let i = 0; i <= nxx; i++) {
+          rows.push([i * dx, j * dy, 0]);
+        }
+      }
+      return math.matrix(rows);
+    });
+
+    p.set('meshRect_cst', (nx: any, ny: any) => {
+      const nxx = Number(nx), nyy = Number(ny);
+      const rows: number[][] = [];
+      for (let j = 0; j < nyy; j++) {
+        for (let i = 0; i < nxx; i++) {
+          const n1 = j * (nxx + 1) + i + 1;
+          const n2 = n1 + 1;
+          const n3 = n1 + (nxx + 1) + 1;
+          const n4 = n1 + (nxx + 1);
+          rows.push([n1, n2, n3]);
+          rows.push([n1, n3, n4]);
+        }
+      }
+      return math.matrix(rows);
+    });
+
+    p.set('fixed_left_edge', (nx: any, ny: any) => {
+      const nxx = Number(nx), nyy = Number(ny);
+      const dofs: number[] = [];
+      for (let j = 0; j <= nyy; j++) {
+        const n = j * (nxx + 1) + 1; // left edge node (1-based)
+        dofs.push(2 * n - 1, 2 * n); // ux, uy
+      }
+      return math.matrix([dofs]);
+    });
+
     p.set('solve_fem', (Kg: any, Fv: any, fixed: any) => {
       const nDof = (Kg.toArray ? Kg.toArray() : Kg).length;
       const free = p.get('freedofs')(nDof, fixed);
@@ -745,7 +784,7 @@ export function createEngine() {
     userFunctions = new Map([...codeFunctions]);
     // Pre-load FEM MATLAB library (user can see them in 📚 panel)
     // Skip functions that are already registered as JS builtins (faster & more reliable)
-    const jsBuiltins = new Set(['freedofs','submat','subvec','fullvec','solve_fem','assemble','assemble_k']);
+    const jsBuiltins = new Set(['freedofs','submat','subvec','fullvec','solve_fem','assemble','assemble_k','meshRect_nodes','meshRect_cst','fixed_left_edge']);
     for (const mf of femMatlabLibrary) {
       if (!userFunctions.has(mf.name) && !jsBuiltins.has(mf.name)) {
         userFunctions.set(mf.name, mf);
