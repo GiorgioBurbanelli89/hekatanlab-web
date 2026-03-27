@@ -411,10 +411,6 @@ function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxD
     const headLen = arrowLen * 0.25;
     const headW = arrowLen * 0.12;
     scene.add(new THREE.ArrowHelper(dir, arrowOrigin, arrowLen, 0xff6600, headLen, headW));
-    // Label with force value
-    const label = makeTextSprite(`${mag.toPrecision(3)}`, 0xff6600, maxDim * 0.012);
-    label.position.copy(arrowOrigin).sub(dir.clone().multiplyScalar(maxDim * 0.04));
-    scene.add(label);
   }
 }
 
