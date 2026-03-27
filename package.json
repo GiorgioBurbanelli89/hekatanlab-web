@@ -13,7 +13,8 @@
     "katex": "^0.16.0",
     "mathjs": "^13.0.0",
     "nerdamer": "^1.1.13",
-    "three": "^0.183.2"
+    "three": "^0.183.2",
+    "vanjs-core": "^1.6.0"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
