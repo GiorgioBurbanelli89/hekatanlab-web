@@ -1132,5 +1132,9 @@ export function createEngine() {
     userFunctions.clear();
   }
 
-  return { evaluate, reset, loadFunctions, addFunction: addFunction, removeFunction };
+  function getScope(): Record<string, any> {
+    try { return parser.getAll(); } catch { return {}; }
+  }
+
+  return { evaluate, reset, getScope, loadFunctions, addFunction: addFunction, removeFunction };
 }

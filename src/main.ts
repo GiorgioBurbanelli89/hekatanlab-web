@@ -2,6 +2,10 @@ import './styles.css';
 import { createEngine, loadFunctions, addFunction, removeFunction } from './engine';
 import { renderOutput } from './renderer';
 import { TEMPLATES } from './templates';
+import { parseS2k, s2kToMatlab } from './s2kParser';
+import { parseE2k, e2kToMatlab } from './e2kParser';
+import { exportS2k, type S2kExportData } from './s2kExporter';
+import { exportE2k, type E2kExportData } from './e2kExporter';
 
 // ── Build UI ──
 const categories = [...new Set(TEMPLATES.map(t => t.category))];
@@ -21,6 +25,8 @@ document.body.innerHTML = `
     <option value="">📂 Ejemplos</option>
     ${templateOptions}
   </select>
+  <button id="btn-import" title="Importar S2K/E2K">📁 Import</button>
+  <button id="btn-export" title="Exportar S2K/E2K">💾 Export</button>
   <button id="btn-funcs">📚</button>
   <button id="btn-autorun" class="active" title="Autorun ON/OFF">⚡</button>
   <button id="btn-theme" title="Claro/Oscuro">☀</button>
@@ -129,6 +135,124 @@ document.getElementById('btn-funcs')!.addEventListener('click', () => {
     p.remove();
   });
   document.getElementById('fn-c')!.addEventListener('click', () => p.remove());
+});
+
+// ── Import S2K/E2K ──
+document.getElementById('btn-import')!.addEventListener('click', () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.s2k,.S2K,.$2k,.$2K,.e2k,.E2K';
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      const ext = file.name.toLowerCase();
+      let matlab = '';
+      try {
+        if (ext.endsWith('.e2k')) {
+          const parsed = parseE2k(text);
+          matlab = e2kToMatlab(parsed);
+        } else {
+          const parsed = parseS2k(text);
+          matlab = s2kToMatlab(parsed);
+        }
+        editor.value = matlab;
+        run();
+      } catch (err: any) {
+        alert(`Error importando ${file.name}: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+  });
+  input.click();
+});
+
+// ── Export S2K/E2K ──
+document.getElementById('btn-export')!.addEventListener('click', () => {
+  document.getElementById('export-panel')?.remove();
+  const p = document.createElement('div');
+  p.id = 'export-panel';
+  p.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-panel);border:2px solid var(--accent);border-radius:12px;padding:20px;z-index:10000;color:var(--text);font-family:monospace;font-size:13px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+  p.innerHTML = `
+    <h3 style="color:var(--accent);margin:0 0 12px">💾 Exportar modelo</h3>
+    <p style="color:var(--text-dim);font-size:11px;margin:0 0 12px">Exporta las variables <b>nodes</b>, <b>frames/elem</b>, <b>supports</b>, <b>loads</b> del editor actual.</p>
+    <div style="display:flex;gap:8px;flex-direction:column">
+      <button id="exp-s2k" style="padding:8px;background:#1a3a5c;color:#66ccff;border:1px solid #66ccff;border-radius:4px;cursor:pointer;font-size:13px">📄 Exportar .s2k (SAP2000)</button>
+      <button id="exp-e2k" style="padding:8px;background:#1a4a2a;color:#66ff99;border:1px solid #66ff99;border-radius:4px;cursor:pointer;font-size:13px">📄 Exportar .e2k (ETABS)</button>
+      <button id="exp-close" style="padding:6px;background:var(--bg);color:var(--text-dim);border:1px solid var(--border);border-radius:4px;cursor:pointer">✕ Cerrar</button>
+    </div>`;
+  document.body.appendChild(p);
+
+  const extractData = (): { nodes: number[][]; elements: number[][]; frameProps: number[][]; supports: number[][]; loads: number[][] } | null => {
+    // Run engine to get current scope
+    engine.evaluate(editor.value);
+    const scope = engine.getScope();
+    // Try to extract arrays from scope
+    const toArr = (v: any): number[][] => {
+      if (!v) return [];
+      try {
+        const a = (v.toArray ? v.toArray() : v) as any[];
+        if (!Array.isArray(a)) return [];
+        return a.map((row: any) => Array.isArray(row) ? row.map(Number) : [Number(row)]);
+      } catch { return []; }
+    };
+    const nodes = toArr(scope.nodes);
+    if (nodes.length === 0) { alert('No se encontró variable "nodes" en el editor'); return null; }
+    const frames = toArr(scope.frames || scope.elem || scope.elements);
+    const props = toArr(scope.frame_props || scope.props);
+    const sups = toArr(scope.supports);
+    const lds = toArr(scope.loads);
+    return { nodes, elements: frames, frameProps: props, supports: sups, loads: lds };
+  };
+
+  const download = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  document.getElementById('exp-s2k')!.addEventListener('click', () => {
+    const data = extractData();
+    if (!data) return;
+    try {
+      const s2kData: S2kExportData = {
+        nodes: data.nodes,
+        frames: data.elements,
+        frameProps: data.frameProps.length > 0 ? data.frameProps : undefined,
+        supports: data.supports.length > 0 ? data.supports : undefined,
+        loads: data.loads.length > 0 ? data.loads : undefined,
+        title: 'HékatanLab Model',
+      };
+      const text = exportS2k(s2kData);
+      download(text, 'model.s2k');
+      p.remove();
+    } catch (err: any) { alert(`Error exportando: ${err.message}`); }
+  });
+
+  document.getElementById('exp-e2k')!.addEventListener('click', () => {
+    const data = extractData();
+    if (!data) return;
+    try {
+      const e2kData: E2kExportData = {
+        nodes: data.nodes,
+        elements: data.elements,
+        props: data.frameProps.length > 0 ? data.frameProps : undefined,
+        supports: data.supports.length > 0 ? data.supports : undefined,
+        loads: data.loads.length > 0 ? data.loads : undefined,
+        title: 'HékatanLab Model',
+      };
+      const text = exportE2k(e2kData);
+      download(text, 'model.e2k');
+      p.remove();
+    } catch (err: any) { alert(`Error exportando: ${err.message}`); }
+  });
+
+  document.getElementById('exp-close')!.addEventListener('click', () => p.remove());
 });
 
 // Help
