@@ -167,9 +167,39 @@ export function createEngine() {
       }
       if (accum) joined.push({ text: accum, startLine: bodyLines.length - 1 });
 
+      // Split lines by semicolons (but not inside brackets)
+      const expanded: { text: string; startLine: number }[] = [];
+      for (const line of joined) {
+        const t = line.text.trim();
+        if (!t || t.startsWith('%') || t.startsWith('for ') || t.startsWith('while ') || t.startsWith('if ') || t === 'end' || t === 'else') {
+          expanded.push(line);
+          continue;
+        }
+        // Split by ; only outside brackets
+        let depth = 0;
+        let parts: string[] = [];
+        let cur = '';
+        for (const ch of t) {
+          if (ch === '[' || ch === '(') depth++;
+          else if (ch === ']' || ch === ')') depth--;
+          if (ch === ';' && depth === 0) {
+            if (cur.trim()) parts.push(cur.trim());
+            cur = '';
+          } else {
+            cur += ch;
+          }
+        }
+        if (cur.trim()) parts.push(cur.trim());
+        for (const p of parts) {
+          expanded.push({ text: p, startLine: line.startLine });
+        }
+      }
+
       // Track known vars for _idx
       const funcKnownVars = new Set<string>(fn.params);
-      for (const [k] of Object.entries(currentScope)) funcKnownVars.add(k);
+      for (const [k, v] of Object.entries(currentScope)) {
+        if (typeof v !== 'function') funcKnownVars.add(k);
+      }
 
       // Execute body with for/while/if support
       const MAX_ITER_FN = 10000;
@@ -254,7 +284,7 @@ export function createEngine() {
         }
       }
 
-      execFnBody(joined);
+      execFnBody(expanded);
 
       // Return output variables
       if (fn.outputs && fn.outputs.length > 0) {

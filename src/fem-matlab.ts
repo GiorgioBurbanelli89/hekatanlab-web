@@ -142,8 +142,14 @@ for j = range(0, ny-1, 1)
     n2 = n1 + 1
     n3 = n1 + nx + 1
     n4 = n3 + 1
-    els(e,1) = n1; els(e,2) = n2; els(e,3) = n4; e = e + 1
-    els(e,1) = n1; els(e,2) = n4; els(e,3) = n3; e = e + 1
+    els(e,1) = n1
+    els(e,2) = n2
+    els(e,3) = n4
+    e = e + 1
+    els(e,1) = n1
+    els(e,2) = n4
+    els(e,3) = n3
+    e = e + 1
   end
 end`
   },
@@ -286,10 +292,14 @@ Ke = ke * [lx*lx,lx*ly,lx*lz,-lx*lx,-lx*ly,-lx*lz;
     name: 'fixed_left_edge',
     params: ['nx', 'ny'],
     description: 'DOFs fijos del borde izquierdo (x=0) para 2 DOF/nodo',
-    body: `fdofs = []
+    body: `nBnd = ny + 1
+fdofs = zeros(1, nBnd * 2)
+k = 1
 for j = range(0, ny, 1)
   n = j*(nx+1) + 1
-  fdofs = [fdofs, 2*n-1, 2*n]
+  fdofs(k) = 2*n-1
+  fdofs(k+1) = 2*n
+  k = k + 2
 end`
   },
 

@@ -4,10 +4,20 @@
  */
 
 // @ts-ignore
-import * as TriangleModuleImport from './triangle.js';
-const TriangleModuleFactory = (TriangleModuleImport as any).default || TriangleModuleImport;
+import triangleJsText from './triangle.js?raw';
 // @ts-ignore
 import triangleWasmUrl from './triangle.wasm?url';
+
+// Evaluate the emscripten IIFE to extract the factory function
+let TriangleModuleFactory: any = null;
+try {
+  // The JS exports: var TriangleModule = (()=>{ ... return async function(...){...} })();
+  // We wrap it to capture the result
+  const fn = new Function(`var module = { exports: {} }; var exports = module.exports; var define = undefined;\n${triangleJsText}\nreturn module.exports.default || module.exports || TriangleModule;`);
+  TriangleModuleFactory = fn();
+} catch (e) {
+  console.warn('Triangle JS eval failed:', e);
+}
 
 let Module: any = null;
 let _triangulate_mesh: any = null;
