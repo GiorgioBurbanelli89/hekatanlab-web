@@ -318,8 +318,26 @@ show3d(nds, els, "Malla CST 3x2")` },
 
   // ── Mecánica Computacional ──
   { name: 'FEM — Barra axial', category: 'FEM', code: `% ═══════════════════════════════════════════
-% FEM: Barra axial paso a paso
+% FEM: Barra axial — derivacion completa
 % ═══════════════════════════════════════════
+
+% ── Funciones de forma (1D lineal) ──
+% N1(xi) = 1 - xi/L = (L - x)/L
+% N2(xi) = xi/L = x/L
+% donde xi in [0, L]
+disp("Funciones de forma 1D lineales:")
+disp("N1(x) = (L - x) / L")
+disp("N2(x) = x / L")
+
+% ── Derivadas ──
+% dN1/dx = -1/L
+% dN2/dx = 1/L
+% B = [-1/L, 1/L]
+disp("Matriz B = dN/dx = [-1/L, 1/L]")
+
+% ── Rigidez: K = integral(B'*E*A*B, 0, L) ──
+% K = E*A/L * [1, -1; -1, 1]
+disp("K = E*A/L * [1,-1; -1,1]")
 
 L = 2
 E = 210000
@@ -339,11 +357,11 @@ K_red = K(2, 2)
 F_red = q * L / 2 + P
 u2 = F_red / K_red
 
-% Verificación
+% Verificacion analitica
 u_exact = (P * L + q * L^2 / 2) / (E * A)
 error_pct = abs(u2 - u_exact) / u_exact * 100
 
-% Reacción y esfuerzo
+% Reaccion y esfuerzo
 R1 = -(P + q * L)
 sigma = E * u2 / L` },
 
@@ -508,7 +526,22 @@ hist(datos, 20, "Distribución (suma de uniformes)")` },
   // ══════════════════════════════════════════
 
 
-  { name: 'FEM — Truss 2D (3 barras)', category: 'FEM', code: `% Truss 2D - 3 barras con ensamblaje automatico
+  { name: 'FEM — Truss 2D (3 barras)', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Truss 2D — derivacion completa
+% ═══════════════════════════════════════════
+
+% ── Funciones de forma (barra axial 1D) ──
+% N1(xi) = 1 - xi/L     N2(xi) = xi/L
+% B = dN/dx = [-1/L, 1/L]
+% K_local = EA/L * [1,-1; -1,1] (2x2 local)
+disp("Truss: K_local = EA/L * [1,-1; -1,1]")
+
+% ── Transformacion 2D ──
+% T = [c,s,0,0; -s,c,0,0; 0,0,c,s; 0,0,-s,c]
+% c = cos(theta) = dx/L, s = sin(theta) = dz/L
+% K_global = T' * K_local_4x4 * T
+disp("T_2d = [c,s,0,0; -s,c,0,0; 0,0,c,s; 0,0,-s,c]")
+
 E = 200e3;
 Asec = 0.01;
 
@@ -565,27 +598,69 @@ els = [1,3; 2,4; 3,5; 4,5; 6,8; 7,9; 8,10; 9,10; 3,8; 4,9; 5,10]
 
 show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
 
-  { name: 'FEM — Placa CST', category: 'FEM', code: `% Placa CST - Plane stress con ensamblaje automatico
+  { name: 'FEM — Placa CST', category: 'FEM', code: `% ═══════════════════════════════════════════
+% FEM: Triangulo CST (Constant Strain Triangle)
+% Plane Stress — derivacion completa
+% ═══════════════════════════════════════════
+
 E = 30e6;
 nu = 0.25;
 t = 1;
 
-% Nodos [x,y,z] y conectividad [n1,n2,n3]
+% ── Funciones de forma (CST) ──
+% N1 = 1 - xi - eta
+% N2 = xi
+% N3 = eta
+% Coordenadas naturales: (xi, eta) en [0,1]
+
+disp("Funciones de forma CST:")
+disp("N1 = 1 - xi - eta")
+disp("N2 = xi")
+disp("N3 = eta")
+
+% ── Derivadas de N ──
+% dN/d(xi)  = [-1, 1, 0]
+% dN/d(eta) = [-1, 0, 1]
+disp("Derivadas dN/dxi = [-1, 1, 0]")
+disp("Derivadas dN/deta = [-1, 0, 1]")
+
+% ── Nodos y conectividad ──
 nds = [0,0,0; 2,0,0; 2,1,0; 0,1,0]
 els = [1,2,3; 1,3,4]
 show3d(nds, els, "Placa CST (2 triangulos)", [1,4])
 
-% DOFs: 2 DOF/nodo (ux,uy)
-dofs = [1,2,3,4,5,6; 1,2,5,6,7,8]
+% ── Jacobiano para elemento 1 (nodos 1,2,3) ──
+disp("--- Elemento 1: nodos (0,0), (2,0), (2,1) ---")
+x1 = 0; y1 = 0; x2 = 2; y2 = 0; x3 = 2; y3 = 1;
 
-% Ensamblar con for
+% J = [x2-x1, y2-y1; x3-x1, y3-y1]
+J = [x2 - x1, y2 - y1; x3 - x1, y3 - y1]
+detJ = det(J)
+disp("Area = |det(J)|/2:")
+Area = abs(detJ) / 2
+
+% ── Matriz B (deformacion-desplazamiento) ──
+% B = (1/det(J)) * [b1,0,b2,0,b3,0; 0,c1,0,c2,0,c3; c1,b1,c2,b2,c3,b3]
+% donde bi = yi_next - yi_prev, ci = xi_prev - xi_next
+b1 = y2 - y3; b2 = y3 - y1; b3 = y1 - y2;
+c1 = x3 - x2; c2 = x1 - x3; c3 = x2 - x1;
+B = (1/detJ) * [b1,0,b2,0,b3,0; 0,c1,0,c2,0,c3; c1,b1,c2,b2,c3,b3]
+
+% ── Matriz D (constitutiva - plane stress) ──
+% D = E/(1-nu^2) * [1,nu,0; nu,1,0; 0,0,(1-nu)/2]
+D = (E / (1 - nu^2)) * [1, nu, 0; nu, 1, 0; 0, 0, (1 - nu) / 2]
+
+% ── Rigidez elemental ──
+% Ke = t * Area * B' * D * B
+Ke = t * Area * transpose(B) * D * B
+
+% ── Ensamblaje ──
+dofs = [1,2,3,4,5,6; 1,2,5,6,7,8]
 nDof = 8;
 Kg = zeros(nDof, nDof);
 nElem = 2;
 for e = range(1, nElem, 1)
-  n1 = els(e,1);
-  n2 = els(e,2);
-  n3 = els(e,3);
+  n1 = els(e,1); n2 = els(e,2); n3 = els(e,3);
   Ke = k_cst(E, nu, t, nds(n1,1),nds(n1,2), nds(n2,1),nds(n2,2), nds(n3,1),nds(n3,2));
   d = [dofs(e,1), dofs(e,2), dofs(e,3), dofs(e,4), dofs(e,5), dofs(e,6)];
   Kg = assemble(Kg, Ke, d);
@@ -675,8 +750,31 @@ Uf = fullvec(Ur, free, nDof)` },
 
   { name: 'FEM — Frame 2D + Diagramas N/V/M', category: 'FEM', code: `% ═══════════════════════════════════════════
 % Frame 2D — Portal con diagramas N, V, M
-% (Pórtico simple: 2 columnas + 1 viga)
+% Derivacion completa con funciones de forma
 % ═══════════════════════════════════════════
+
+% ── Funciones de forma Hermite (viga Euler-Bernoulli) ──
+% Axial: N1 = 1-x/L, N2 = x/L (lineales)
+% Flexion (polinomios cubicos):
+%   H1(xi) = 1 - 3*xi^2 + 2*xi^3      (desplazamiento nodo i)
+%   H2(xi) = L*xi*(1 - xi)^2           (rotacion nodo i)
+%   H3(xi) = 3*xi^2 - 2*xi^3           (desplazamiento nodo j)
+%   H4(xi) = L*xi^2*(xi - 1)           (rotacion nodo j)
+%   donde xi = x/L
+disp("Funciones de forma Hermite (viga):")
+disp("H1 = 1 - 3*xi^2 + 2*xi^3")
+disp("H2 = L*xi*(1-xi)^2")
+disp("H3 = 3*xi^2 - 2*xi^3")
+disp("H4 = L*xi^2*(xi-1)")
+
+% ── Matriz de rigidez local 6x6 ──
+% K = [EA/L, 0, 0, -EA/L, 0, 0;
+%      0, 12EI/L^3, 6EI/L^2, 0, -12EI/L^3, 6EI/L^2;
+%      0, 6EI/L^2, 4EI/L, 0, -6EI/L^2, 2EI/L;
+%      -EA/L, 0, 0, EA/L, 0, 0;
+%      0, -12EI/L^3, -6EI/L^2, 0, 12EI/L^3, -6EI/L^2;
+%      0, 6EI/L^2, 2EI/L, 0, -6EI/L^2, 4EI/L]
+disp("K_local = f(EA/L, 12EI/L^3, 6EI/L^2, 4EI/L, 2EI/L)")
 
 % Propiedades (kN, m)
 E = 200e6;
