@@ -744,8 +744,10 @@ export function createEngine() {
     // 3. Register all functions (from code + localStorage + FEM MATLAB library)
     userFunctions = new Map([...codeFunctions]);
     // Pre-load FEM MATLAB library (user can see them in 📚 panel)
+    // Skip functions that are already registered as JS builtins (faster & more reliable)
+    const jsBuiltins = new Set(['freedofs','submat','subvec','fullvec','solve_fem','assemble','assemble_k']);
     for (const mf of femMatlabLibrary) {
-      if (!userFunctions.has(mf.name)) {
+      if (!userFunctions.has(mf.name) && !jsBuiltins.has(mf.name)) {
         userFunctions.set(mf.name, mf);
       }
     }

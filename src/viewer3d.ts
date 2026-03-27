@@ -385,16 +385,27 @@ function addSupports(scene: THREE.Scene, nodes: number[][], supports: number[], 
 }
 
 function addLoads(scene: THREE.Scene, nodes: number[][], loads: number[][], maxDim: number) {
-  for (const [idx, fx, fy, fz] of loads) {
+  for (const ld of loads) {
+    if (!ld || ld.length < 4) continue;
+    const idx = Math.round(ld[0]);
+    const fx = ld[1] || 0, fy = ld[2] || 0, fz = ld[3] || 0;
     const n = nodes[idx - 1];
     if (!n) continue;
-    const origin = new THREE.Vector3(n[0], n[1] || 0, n[2] || 0);
-    const dir = new THREE.Vector3(fx || 0, fy || 0, fz || 0);
+    const nodePos = new THREE.Vector3(n[0], n[1] || 0, n[2] || 0);
+    const dir = new THREE.Vector3(fx, fy, fz);
     const mag = dir.length();
     if (mag < 1e-10) continue;
     dir.normalize();
-    const arrowLen = maxDim * 0.2;
-    scene.add(new THREE.ArrowHelper(dir, origin, arrowLen, 0xee9b00, arrowLen * 0.2, arrowLen * 0.1));
+    // Arrow points TO the node: origin offset backwards from node
+    const arrowLen = maxDim * 0.25;
+    const arrowOrigin = nodePos.clone().sub(dir.clone().multiplyScalar(arrowLen));
+    const headLen = arrowLen * 0.25;
+    const headW = arrowLen * 0.12;
+    scene.add(new THREE.ArrowHelper(dir, arrowOrigin, arrowLen, 0xff6600, headLen, headW));
+    // Label with force value
+    const label = makeTextSprite(`${mag.toPrecision(3)}`, 0xff6600, maxDim * 0.012);
+    label.position.copy(arrowOrigin).sub(dir.clone().multiplyScalar(maxDim * 0.04));
+    scene.add(label);
   }
 }
 
