@@ -140,6 +140,7 @@ export function assemble(Kg: math.Matrix, Ke: math.Matrix, dofs: number[]): math
   const kg = Kg.toArray() as number[][];
   const ke = Ke.toArray() as number[][];
   const n = dofs.length;
+  console.log('[DBG-ASM] dofs:', dofs, 'Ke(0,0):', ke[0]?.[0], 'Kg size:', kg.length);
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       const gi = dofs[i] - 1; // 1-based → 0-based
@@ -149,6 +150,7 @@ export function assemble(Kg: math.Matrix, Ke: math.Matrix, dofs: number[]): math
       }
     }
   }
+  console.log('[DBG-ASM] after: Kg(0,0)=', kg[0][0], 'Kg(1,1)=', kg[1]?.[1]);
   return math.matrix(kg);
 }
 
