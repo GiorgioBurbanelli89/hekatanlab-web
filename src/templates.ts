@@ -601,67 +601,75 @@ els = [1,3; 2,4; 3,5; 4,5; 6,8; 7,9; 8,10; 9,10; 3,8; 4,9; 5,10]
 
 show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
 
-  { name: 'FEM — Placa Delaunay (Shewchuk)', category: 'FEM', code: `% ═══════════════════════════════════════════
-% Placa con malla Delaunay (Triangle de Shewchuk)
-% Triangulacion automatica de calidad
+  { name: 'Awatif — Plate (Delaunay shell)', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Plate — awatif v2.0.0 example (plate/main.ts)
+% Shell triangular 18 DOF con malla Delaunay
+% getMesh → k_shell_tri → deform → contorno Uz
 % ═══════════════════════════════════════════
 
-% Vertices del poligono
+% Vertices del poligono (awatif: xPosition=15)
 points = [0,0,0; 15,0,0; 15,10,0; 0,5,0]
-
-% Poligono (indices 0-based para getMesh)
 polygon = [0, 1, 2, 3]
 
-% Generar malla Delaunay (max area = 3, min angle = 30)
+% Generar malla Delaunay (Triangle de Shewchuk)
+% maxArea=3 → malla moderada, minAngle=30
 [nds, els, bnd] = getMesh(points, polygon, 3, 30)
 
-disp("Nodos generados:")
-disp(size(nds, 1))
-disp("Triangulos generados:")
-disp(size(els, 1))
+nNodes = size(nds, 1)
+nElem = size(els, 1)
+disp("Nodos:"); disp(nNodes)
+disp("Triangulos:"); disp(nElem)
 
-show3d(nds, els, "Placa Delaunay")
+show3d(nds, els, "Plate — Delaunay mesh")
 
-% Propiedades
+% Propiedades (awatif: Ex=Ey=100, nu=0.3, t=1)
 E = 100; nu = 0.3; t = 1;
 
-% Ensamblaje CST
-nNodes = size(nds, 1)
-nDof = nNodes * 2
+% ── Ensamblaje shell tri 18 DOF (6 DOF/nodo) ──
+nDof = nNodes * 6
 Kg = zeros(nDof, nDof)
-nElem = size(els, 1)
 
 for e = range(1, nElem, 1)
   n1 = els(e,1); n2 = els(e,2); n3 = els(e,3);
-  Ke = k_cst(E, nu, t, nds(n1,1),nds(n1,2), nds(n2,1),nds(n2,2), nds(n3,1),nds(n3,2));
-  d1 = (n1-1)*2; d2 = (n2-1)*2; d3 = (n3-1)*2;
-  d = [d1+1,d1+2, d2+1,d2+2, d3+1,d3+2];
+  x1=nds(n1,1); y1=nds(n1,2);
+  x2=nds(n2,1); y2=nds(n2,2);
+  x3=nds(n3,1); y3=nds(n3,2);
+  Ke = k_shell_tri(E, nu, t, x1,y1, x2,y2, x3,y3);
+  d1 = (n1-1)*6; d2 = (n2-1)*6; d3 = (n3-1)*6;
+  d = [d1+1,d1+2,d1+3,d1+4,d1+5,d1+6, d2+1,d2+2,d2+3,d2+4,d2+5,d2+6, d3+1,d3+2,d3+3,d3+4,d3+5,d3+6];
   Kg = assemble(Kg, Ke, d);
 end
 
-% BC: bordes fijos (nodos del borde)
-nBnd = length(bnd)
+% ── BC: bordes empotrados (6 DOF por nodo) ──
 fixed = [];
+nBnd = length(bnd)
 for i = range(1, nBnd, 1)
   nb = bnd(i);
-  fixed = [fixed, (nb-1)*2+1, (nb-1)*2+2];
+  d0 = (nb-1)*6;
+  fixed = [fixed, d0+1,d0+2,d0+3,d0+4,d0+5,d0+6];
 end
 
-% Carga: Fy = -3 en todos los nodos
+% ── Cargas: Fz = -3 en todos los nodos ──
 Fv = zeros(nDof, 1)
 for i = range(1, nNodes, 1)
-  Fv((i-1)*2 + 2) = -3;
+  Fv((i-1)*6 + 3) = -3;
 end
 
-% Resolver
-free = freedofs(nDof, fixed)
-Kr = submat(Kg, free)
-Fr = subvec(Fv, free)
-Ur = inv(Kr) * Fr
-Uf = fullvec(Ur, free, nDof)
+% ── Resolver ──
+Uf = solve_fem(Kg, Fv, fixed)
 
-% Deformada
-show_deformed(nds, els, Uf, 50, 2, "Deformada Delaunay (50x)")` },
+% Desplazamiento maximo Uz
+Uz_max = 0;
+for i = range(1, nNodes, 1)
+  uz_i = Uf((i-1)*6 + 3);
+  if abs(uz_i) > abs(Uz_max)
+    Uz_max = uz_i;
+  end
+end
+disp("Uz max:"); disp(Uz_max)
+
+% ── Deformada + contorno Uz ──
+show_deformed(nds, els, Uf, 5, 6, "Plate — deformada (5x)")` },
 
   { name: 'FEM — Shell Tri (placa)', category: 'FEM', code: `% ═══════════════════════════════════════════
 % Shell Triangular 18 DOF — Placa con carga
