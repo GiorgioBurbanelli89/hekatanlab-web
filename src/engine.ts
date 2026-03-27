@@ -34,6 +34,7 @@ export interface StoredFunction {
   params: string[];
   body: string;
   description?: string;
+  outputs?: string[];
 }
 
 const STORAGE_KEY = 'hekatanlab-functions';
@@ -66,20 +67,23 @@ function parseMatlabFunctions(code: string): { functions: Map<string, StoredFunc
   const lines = code.split('\n');
   const cleanLines: string[] = [];
   let inFunc = false;
-  let currentFunc: { name: string; params: string[]; outVar: string; bodyLines: string[] } | null = null;
+  let currentFunc: { name: string; params: string[]; outVar: string; bodyLines: string[]; outputs: string[] } | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const trimmed = lines[i].trim();
 
-    // Detect function definition
-    const funcMatch = trimmed.match(/^function\s+(?:\[?(\w+)\]?\s*=\s*)?(\w+)\s*\(([^)]*)\)/);
+    // Detect function definition: function [a,b] = name(params) or function a = name(params)
+    const funcMatch = trimmed.match(/^function\s+(?:\[([^\]]+)\]\s*=\s*|(\w+)\s*=\s*)?(\w+)\s*\(([^)]*)\)/);
     if (funcMatch && !inFunc) {
       inFunc = true;
+      const outputStr = funcMatch[1] || funcMatch[2] || 'ans';
+      const outputs = outputStr.split(',').map((s: string) => s.trim()).filter((s: string) => s);
       currentFunc = {
-        outVar: funcMatch[1] || 'ans',
-        name: funcMatch[2],
-        params: funcMatch[3].split(',').map(p => p.trim()).filter(p => p),
+        outVar: outputs[0],
+        name: funcMatch[3],
+        params: funcMatch[4].split(',').map((p: string) => p.trim()).filter((p: string) => p),
         bodyLines: [],
+        outputs,
       };
       cleanLines.push(`% function ${currentFunc.name}(${currentFunc.params.join(', ')}) defined`);
       continue;
@@ -92,7 +96,8 @@ function parseMatlabFunctions(code: string): { functions: Map<string, StoredFunc
           name: currentFunc.name,
           params: currentFunc.params,
           body: currentFunc.bodyLines.join('\n'),
-          description: `Returns ${currentFunc.outVar}`,
+          description: `Returns ${currentFunc.outputs ? currentFunc.outputs.join(', ') : currentFunc.outVar}`,
+          outputs: currentFunc.outputs || [currentFunc.outVar],
         });
       }
       inFunc = false;
@@ -116,9 +121,7 @@ export function createEngine() {
   let userFunctions = new Map<string, StoredFunction>();
 
   function registerFunction(fn: StoredFunction, p: any) {
-    // Create a JS function that evaluates the body with params bound
     const func = (...args: any[]) => {
-      // Create a sub-parser with params bound
       const subParser = math.parser();
       // Copy current scope
       const currentScope = p.getAll();
@@ -135,17 +138,139 @@ export function createEngine() {
           try { registerFunction(f, subParser); } catch {}
         }
       }
-      // Evaluate body lines
-      let result: any = undefined;
-      const bodyLines = fn.body.split('\n');
-      for (const line of bodyLines) {
-        const t = line.trim();
-        if (!t || t.startsWith('%')) continue;
-        try {
-          result = subParser.evaluate(t);
-        } catch {}
+      // Register builtins (_idx, _setidx, assemble, etc.)
+      loadFemFunctions(subParser);
+      subParser.set('_idx', p.get('_idx'));
+      subParser.set('_setidx', p.get('_setidx'));
+      try { subParser.set('disp', p.get('disp')); } catch {}
+
+      // Parse body as blocks (supports for/while/if)
+      const bodyLines = fn.body.split('\n').map((t: string, i: number) => ({ text: t, startLine: i }));
+
+      // Join multi-line matrices
+      const joined: { text: string; startLine: number }[] = [];
+      let accum = '';
+      let accumStart = 0;
+      let bracketDepth = 0;
+      for (let i = 0; i < bodyLines.length; i++) {
+        const trimmed = bodyLines[i].text.trim();
+        if (bracketDepth === 0 && (trimmed === '' || trimmed.startsWith('%'))) { joined.push(bodyLines[i]); continue; }
+        if (bracketDepth === 0) { accum = trimmed; accumStart = i; } else { accum += ' ' + trimmed; }
+        for (const ch of trimmed) { if (ch === '[') bracketDepth++; else if (ch === ']') bracketDepth--; }
+        if (bracketDepth <= 0) { bracketDepth = 0; joined.push({ text: accum, startLine: accumStart }); accum = ''; }
       }
-      return result;
+      if (accum) joined.push({ text: accum, startLine: bodyLines.length - 1 });
+
+      // Track known vars for _idx
+      const funcKnownVars = new Set<string>(fn.params);
+      for (const [k] of Object.entries(currentScope)) funcKnownVars.add(k);
+
+      // Execute body with for/while/if support
+      const MAX_ITER_FN = 10000;
+      function execFnBody(lines: { text: string; startLine: number }[]) {
+        let i = 0;
+        while (i < lines.length) {
+          const t = lines[i].text.trim();
+          if (!t || t.startsWith('%')) { i++; continue; }
+
+          let kw = t;
+          const pci = kw.indexOf('%');
+          if (pci > 0) kw = kw.substring(0, pci).trim();
+          if (kw === 'end' || kw === 'endfunction') { i++; continue; }
+
+          // for var = range
+          const forMatch = kw.match(/^for\s+([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+          if (forMatch) {
+            i++;
+            const body: typeof lines = [];
+            let depth = 1;
+            while (i < lines.length) {
+              const kt = lines[i].text.trim().replace(/%.*$/, '').trim();
+              if (/^(for|while|if)\s+/.test(kt)) depth++;
+              if (kt === 'end') { depth--; if (depth === 0) { i++; break; } }
+              body.push(lines[i]); i++;
+            }
+            // Evaluate range
+            let rangeExpr = forMatch[2];
+            rangeExpr = rangeExpr.replace(/([a-zA-Z_]\w*)\(([^)]+)\)/g, (match: string, name: string, a: string) => {
+              if (funcKnownVars.has(name)) return `_idx(${name}, ${a})`;
+              return match;
+            });
+            try {
+              const rangeVal = subParser.evaluate(rangeExpr);
+              let values: number[];
+              if (typeof rangeVal === 'number') values = [rangeVal];
+              else if (rangeVal && typeof rangeVal.toArray === 'function') values = rangeVal.toArray().flat();
+              else if (Array.isArray(rangeVal)) values = rangeVal.flat();
+              else values = [Number(rangeVal)];
+              let iter = 0;
+              for (const v of values) {
+                if (++iter > MAX_ITER_FN) break;
+                subParser.set(forMatch[1], v);
+                funcKnownVars.add(forMatch[1]);
+                execFnBody(body);
+              }
+            } catch (e: any) { console.warn('fn for error:', e.message); }
+            continue;
+          }
+
+          // Regular line
+          let expr = t.replace(/;$/, '');
+          // Handle indexed assignment: M(i,j) = val → M = _setidx(M, i, j, val)
+          const idxAssign = expr.match(/^([a-zA-Z_]\w*)\(([^)]+)\)\s*=\s*(.+)$/);
+          if (idxAssign) {
+            const [, vn, idxStr, rhs] = idxAssign;
+            const indices = idxStr.split(',').map((a: string) => a.trim());
+            // Replace _idx in rhs
+            let rhsFixed = rhs.replace(/([a-zA-Z_]\w*)\(([^)]+)\)/g, (match: string, name: string, a: string) => {
+              if (funcKnownVars.has(name)) return `_idx(${name}, ${a})`;
+              return match;
+            });
+            expr = `${vn} = _setidx(${vn}, ${indices.join(', ')}, ${rhsFixed})`;
+            funcKnownVars.add(vn);
+          } else {
+            // Regular _idx replacement
+            const assignMatch2 = expr.match(/^([a-zA-Z_]\w*)\s*=/);
+            if (assignMatch2) funcKnownVars.add(assignMatch2[1]);
+            expr = expr.replace(/([a-zA-Z_]\w*)\(([^)]+)\)/g, (match: string, name: string, a: string) => {
+              if (funcKnownVars.has(name)) return `_idx(${name}, ${a})`;
+              return match;
+            });
+          }
+          try {
+            const res = subParser.evaluate(expr);
+            // Track result for return
+            if (res !== undefined && !(res instanceof Function)) {
+              // nothing - just let subParser track it
+            }
+          } catch (e: any) { console.warn(`fn eval error [${fn.name}]: ${e.message} in: ${expr}`); }
+          i++;
+        }
+      }
+
+      execFnBody(joined);
+
+      // Return output variables
+      if (fn.outputs && fn.outputs.length > 0) {
+        if (fn.outputs.length === 1) {
+          try { return subParser.evaluate(fn.outputs[0]); } catch { return undefined; }
+        }
+        // Multiple outputs: return array
+        return fn.outputs.map((o: string) => { try { return subParser.evaluate(o); } catch { return undefined; } });
+      }
+      // Fallback: infer return from last assignment in body
+      const bodyLines2 = fn.body.split('\n');
+      for (let bi = bodyLines2.length - 1; bi >= 0; bi--) {
+        const bt = bodyLines2[bi].trim();
+        if (!bt || bt.startsWith('%') || bt === 'end') continue;
+        const am = bt.match(/^([a-zA-Z_]\w*)\s*=/);
+        if (am) {
+          try { return subParser.evaluate(am[1]); } catch { return undefined; }
+        }
+        break;
+      }
+      // Last resort: try to get 'ans' or scope
+      try { return subParser.evaluate('ans'); } catch { return undefined; }
     };
     p.set(fn.name, func);
   }
