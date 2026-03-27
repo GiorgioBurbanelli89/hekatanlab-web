@@ -515,41 +515,46 @@ Asec = 0.01;
 % Nodos [x,y,z] y conectividad [n1,n2]
 nds = [0,0,0; 4,0,0; 2,0,3]
 els = [1,3; 2,3; 1,2]
-show3d(nds, els, "Truss 2D - 3 barras", [1,2])
+% Cargas: Fz = -100 kN en nodo 3
+loads = [3, 0, 0, -100]
+show3d(nds, els, "Truss 2D - 3 barras", [1,2], loads)
 
-% DOFs por elemento: 2 DOF/nodo (ux,uy)
+% DOFs por elemento: 2 DOF/nodo (ux,uz)
 dofs = [1,2,5,6; 3,4,5,6; 1,2,3,4]
 
-% Ensamblaje con for
-nDof = 6;
-Kg = zeros(nDof, nDof);
-nElem = 3;
+% Ensamblaje
+nDof = 6
+Kg = zeros(nDof, nDof)
+nElem = 3
 for e = range(1, nElem, 1)
-  n1 = els(e, 1);
-  n2 = els(e, 2);
-  dx = nds(n2, 1) - nds(n1, 1);
-  dy = nds(n2, 3) - nds(n1, 3);
-  Le = sqrt(dx^2 + dy^2);
-  c = dx / Le;
-  s = dy / Le;
-  ke = E * Asec / Le;
-  Kl = ke * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0];
-  T = [c,s,0,0; -s,c,0,0; 0,0,c,s; 0,0,-s,c];
-  Ke = transpose(T) * Kl * T;
-  d = [dofs(e,1), dofs(e,2), dofs(e,3), dofs(e,4)];
-  Kg = assemble(Kg, Ke, d);
+  n1 = els(e, 1)
+  n2 = els(e, 2)
+  dx = nds(n2, 1) - nds(n1, 1)
+  dy = nds(n2, 3) - nds(n1, 3)
+  Le = sqrt(dx^2 + dy^2)
+  c = dx / Le
+  s = dy / Le
+  ke = E * Asec / Le
+  Kl = ke * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
+  T = [c,s,0,0; -s,c,0,0; 0,0,c,s; 0,0,-s,c]
+  Ke = transpose(T) * Kl * T
+  d = [dofs(e,1), dofs(e,2), dofs(e,3), dofs(e,4)]
+  Kg = assemble(Kg, Ke, d)
 end
-Kg
 
-% Carga Fy = -100 kN en nodo 3
+% Carga
 Fv = [0; 0; 0; 0; 0; -100]
 
-% BC: nodos 1,2 fijos → libres DOFs 5,6
+% Resolver: nodos 1,2 fijos → libres DOFs 5,6
 free = [5, 6]
 Kr = submat(Kg, free)
 Fr = subvec(Fv, free)
 Ur = inv(Kr) * Fr
 Uf = fullvec(Ur, free, 6)
+
+disp("Desplazamientos nodo 3 (ux, uz):")
+disp(Uf(5))
+disp(Uf(6))
 
 % Deformada
 show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")` },
