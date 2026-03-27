@@ -1125,88 +1125,86 @@ show_deformed(nds, els, Uf, 1000, 2, "Deformada CST (1000x)")` },
 % ═══════════════════════════════════════════
 
 % Propiedades
-E = 25e6;
-nu = 0.2;
-t_zap = 0.4;
-L_zap = 2;
-H_ped = 1.5;
-P = -200;
+E = 25e6
+nu = 0.2
+t_zap = 0.4
+L = 2
+H = 1.5
+P = -200
 
-% ── Nodos de la zapata (plano XY, z=0) ──
-% Malla 2x2 → 9 nodos, 8 triangulos
-nds = zeros(10, 3)
-nds(1,1) = 0;      nds(1,2) = 0
-nds(2,1) = L_zap/2; nds(2,2) = 0
-nds(3,1) = L_zap;  nds(3,2) = 0
-nds(4,1) = 0;      nds(4,2) = L_zap/2
-nds(5,1) = L_zap/2; nds(5,2) = L_zap/2
-nds(6,1) = L_zap;  nds(6,2) = L_zap/2
-nds(7,1) = 0;      nds(7,2) = L_zap
-nds(8,1) = L_zap/2; nds(8,2) = L_zap
-nds(9,1) = L_zap;  nds(9,2) = L_zap
-% Nodo 10: tope del pedestal (centro, z=H_ped)
-nds(10,1) = L_zap/2; nds(10,2) = L_zap/2; nds(10,3) = H_ped
+% ── Nodos [x, y, z] ──
+% Malla 2x2 zapata (9 nodos) + tope pedestal (nodo 10)
+h = L/2
+nodes = [0,0,0; h,0,0; L,0,0; 0,h,0; h,h,0; L,h,0; 0,L,0; h,L,0; L,L,0; h,h,H]
+nNodes = 10
+nDof = nNodes * 6
 
-% ── Elementos shell (triangulos) ──
-% 8 triangulos para malla 2x2
+% ── Elementos shell (8 triangulos) ──
 els_sh = [1,2,5; 1,5,4; 2,3,6; 2,6,5; 4,5,8; 4,8,7; 5,6,9; 5,9,8]
-nElem_sh = 8
+nSh = 8
 
-% ── Elemento frame (pedestal) ──
-% Nodo 5 (centro zapata) a nodo 10 (tope)
+% ── Elemento frame: nodo 5 → nodo 10 ──
 els_fr = [5, 10]
 
-show3d(nds, [els_sh; els_fr], "Zapata + Pedestal")
+% Visualizar
+show3d(nodes, els_sh, "Zapata + Pedestal")
 
-% ── Ensamblaje ──
-nNodes = 10;
-nDof = nNodes * 6;
+% ── Ensamblar rigidez global ──
 Kg = zeros(nDof, nDof)
 
-% Shell elements (18 DOF cada uno)
-for e = range(1, nElem_sh, 1)
-  na = els_sh(e,1); nb = els_sh(e,2); nc = els_sh(e,3)
-  Ke = k_shell_tri(E, nu, t_zap, nds(na,1),nds(na,2), nds(nb,1),nds(nb,2), nds(nc,1),nds(nc,2))
-  % DOFs: 6 por nodo [ux,uy,uz,rx,ry,rz]
+% Shell elements (18×18 cada uno, 6 DOF/nodo)
+for e = range(1, nSh, 1)
+  na = els_sh(e,1)
+  nb = els_sh(e,2)
+  nc = els_sh(e,3)
+  xa = nodes(na,1)
+  ya = nodes(na,2)
+  xb = nodes(nb,1)
+  yb = nodes(nb,2)
+  xc = nodes(nc,1)
+  yc = nodes(nc,2)
+  Ke = k_shell_tri(E, nu, t_zap, xa, ya, xb, yb, xc, yc)
   d = [6*na-5,6*na-4,6*na-3,6*na-2,6*na-1,6*na, 6*nb-5,6*nb-4,6*nb-3,6*nb-2,6*nb-1,6*nb, 6*nc-5,6*nc-4,6*nc-3,6*nc-2,6*nc-1,6*nc]
   Kg = assemble(Kg, Ke, d)
 end
 
-% Frame element (pedestal) — 12 DOF
-n1 = 5; n2 = 10;
-dx_p = nds(n2,1)-nds(n1,1); dy_p = nds(n2,2)-nds(n1,2); dz_p = nds(n2,3)-nds(n1,3)
-Le_p = sqrt(dx_p^2 + dy_p^2 + dz_p^2)
-A_ped = 0.09;
-I_ped = 6.75e-4;
-J_ped = 1.35e-3;
-G_ped = E / (2*(1+nu));
-Ke_fr = k_frame3d(E, G_ped, A_ped, I_ped, I_ped, J_ped, Le_p)
-% Transformacion (columna vertical: local x = Z global)
-T_fr = T3d(dx_p, dy_p, dz_p, 0, 0, 1)
+% Frame element (pedestal vertical) — 12×12
+A_ped = 0.09
+I_ped = 6.75e-4
+J_ped = 1.35e-3
+G_ped = E / (2*(1+nu))
+Ke_fr = k_frame3d(E, G_ped, A_ped, I_ped, I_ped, J_ped, H)
+% Columna vertical: vUp debe ser perpendicular al eje Z → usar (1,0,0)
+T_fr = T3d(0, 0, H, 1, 0, 0)
 Ke_fr_g = transpose(T_fr) * Ke_fr * T_fr
-d_fr = [6*n1-5,6*n1-4,6*n1-3,6*n1-2,6*n1-1,6*n1, 6*n2-5,6*n2-4,6*n2-3,6*n2-2,6*n2-1,6*n2]
+d_fr = [25,26,27,28,29,30, 55,56,57,58,59,60]
 Kg = assemble(Kg, Ke_fr_g, d_fr)
 
-% ── Cargas ──
+% ── Cargas: P en nodo 10, dirección -Z ──
 Fv = zeros(nDof, 1)
-Fv(6*10 - 3) = P;
+Fv(57) = P
 
-% ── BC: zapata apoyada en suelo (nodos 1-9: uz=0, esquinas empotradas) ──
-fixed = [3, 9, 15, 21, 27, 33, 39, 45, 51]
-% Esquinas empotradas (nodos 1,3,7,9)
-fixed = [fixed, 1,2,4,5,6, 13,14,16,17,18, 37,38,40,41,42, 49,50,52,53,54]
+% ── Condiciones de borde ──
+% Nodos 1-9: uz=0 (suelo)
+% Esquinas 1,3,7,9: empotrado total
+fixed = [1,2,3,4,5,6, 9,13,14,15,16,17,18, 21,27,33,37,38,39,40,41,42, 45,49,50,51,52,53,54]
 
+% Resolver
 free = freedofs(nDof, fixed)
 Kr = submat(Kg, free)
 Fr = subvec(Fv, free)
-Ur = inv(Kr) * Fr
+Ur = Kr \\ Fr
 Uf = fullvec(Ur, free, nDof)
 
-% Desplazamiento del tope del pedestal
+% ── Resultados ──
 disp("Uz tope pedestal (nodo 10):")
 disp(Uf(57))
 
-show_deformed(nds, [els_sh; els_fr], Uf, 1000, 6, "Deformada (1000x)")` },
+% Reacciones
+R = Kg * Uf
+disp("Suma reacciones Rz:")
+Rz_total = R(3)+R(9)+R(15)+R(21)+R(27)+R(33)+R(39)+R(45)+R(51)
+disp(Rz_total)` },
 
   // ══════════════════════════════════════════
   // Column Buckling (Ormonde)

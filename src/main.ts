@@ -6,6 +6,7 @@ import { parseS2k, s2kToMatlab } from './s2kParser';
 import { parseE2k, e2kToMatlab } from './e2kParser';
 import { exportS2k, type S2kExportData } from './s2kExporter';
 import { exportE2k, type E2kExportData } from './e2kExporter';
+import { femMatlabLibrary } from './fem-matlab';
 
 // ── Build UI ──
 const categories = [...new Set(TEMPLATES.map(t => t.category))];
@@ -113,20 +114,53 @@ document.getElementById('btn-theme')!.addEventListener('click', () => {
   (document.getElementById('btn-theme')!).textContent = dark ? '☀' : '🌙';
 });
 
-// Functions panel
+// Functions panel — shows BOTH built-in FEM functions AND user-saved functions
 document.getElementById('btn-funcs')!.addEventListener('click', () => {
   document.getElementById('funcs-panel')?.remove();
   const fns = loadFunctions();
   const p = document.createElement('div');
   p.id = 'funcs-panel';
-  p.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-panel);border:2px solid var(--accent);border-radius:12px;padding:20px;z-index:10000;color:var(--text);font-family:monospace;font-size:12px;min-width:350px;max-height:70vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
-  let h = '<h3 style="color:var(--accent);margin:0 0 10px">📚 Funciones Guardadas</h3>';
-  if (!fns.length) h += '<p style="color:var(--text-dim)">Ninguna. Define con:<br><code>function K = nombre(x)<br>  ...<br>end</code></p>';
-  for (const f of fns) h += `<div style="border:1px solid var(--border);border-radius:4px;padding:6px;margin:4px 0"><b style="color:var(--accent2)">${f.name}(${f.params.join(',')})</b> <button data-d="${f.name}" style="float:right;background:var(--error);color:#fff;border:none;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:9px">🗑</button><pre style="color:var(--text-dim);font-size:9px;margin:2px 0 0;max-height:40px;overflow:hidden">${f.body}</pre></div>`;
-  h += '<div style="display:flex;gap:6px;margin-top:10px"><button id="fn-s" style="flex:1;padding:5px;background:#0a4a2a;color:var(--accent2);border:1px solid var(--accent2);border-radius:4px;cursor:pointer">💾 Guardar del editor</button><button id="fn-c" style="padding:5px 10px;background:var(--bg);color:var(--text-dim);border:1px solid var(--border);border-radius:4px;cursor:pointer">✕</button></div>';
+  p.style.cssText = 'position:fixed;top:5%;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:2px solid var(--accent);border-radius:12px;padding:20px;z-index:10000;color:var(--text);font-family:monospace;font-size:12px;min-width:500px;max-width:700px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+
+  // Built-in FEM functions
+  let h = '<h3 style="color:var(--accent);margin:0 0 8px">📚 Funciones FEM Predefinidas</h3>';
+  h += '<p style="color:var(--text-dim);font-size:10px;margin:0 0 8px">Click en una función para ver/copiar el código MATLAB</p>';
+
+  for (const mf of femMatlabLibrary) {
+    const desc = mf.description ? `<span style="color:var(--text-dim);font-size:9px;margin-left:8px">${mf.description}</span>` : '';
+    const bodyEscaped = mf.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    h += `<details style="border:1px solid var(--border);border-radius:4px;margin:3px 0;padding:4px 8px">
+      <summary style="cursor:pointer;color:var(--accent2);font-weight:bold;font-size:11px">${mf.name}(${mf.params.join(', ')})${desc}</summary>
+      <pre style="color:var(--text);font-size:10px;margin:4px 0;padding:6px;background:var(--bg);border-radius:4px;white-space:pre-wrap;max-height:200px;overflow-y:auto">function ${mf.name}(${mf.params.join(', ')})\n${bodyEscaped}\nend</pre>
+      <button class="fn-copy" data-code="function ${mf.name}(${mf.params.join(', ')})\n${bodyEscaped}\nend" style="font-size:9px;padding:2px 8px;background:var(--bg);color:var(--accent);border:1px solid var(--accent);border-radius:3px;cursor:pointer;margin:2px 0">📋 Copiar al editor</button>
+    </details>`;
+  }
+
+  // User saved functions
+  h += '<h3 style="color:var(--accent);margin:16px 0 8px;border-top:1px solid var(--border);padding-top:12px">🔧 Funciones del Usuario</h3>';
+  if (!fns.length) h += '<p style="color:var(--text-dim);font-size:10px">Ninguna guardada. Define con <code>function ... end</code> y usa 💾</p>';
+  for (const f of fns) {
+    h += `<div style="border:1px solid var(--border);border-radius:4px;padding:6px;margin:4px 0">
+      <b style="color:var(--accent2)">${f.name}(${f.params.join(',')})</b>
+      <button data-d="${f.name}" style="float:right;background:var(--error);color:#fff;border:none;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:9px">🗑</button>
+      <pre style="color:var(--text-dim);font-size:9px;margin:2px 0 0;max-height:60px;overflow:hidden">${f.body}</pre>
+    </div>`;
+  }
+
+  h += '<div style="display:flex;gap:6px;margin-top:10px"><button id="fn-s" style="flex:1;padding:5px;background:#0a4a2a;color:var(--accent2);border:1px solid var(--accent2);border-radius:4px;cursor:pointer">💾 Guardar del editor</button><button id="fn-c" style="padding:5px 10px;background:var(--bg);color:var(--text-dim);border:1px solid var(--border);border-radius:4px;cursor:pointer">✕ Cerrar</button></div>';
   p.innerHTML = h;
   document.body.appendChild(p);
+
+  // Copy to editor buttons
+  p.querySelectorAll<HTMLButtonElement>('.fn-copy').forEach(b => b.addEventListener('click', () => {
+    const code = b.dataset.code || '';
+    editor.value = code.replace(/\\n/g, '\n') + '\n\n' + editor.value;
+    editor.scrollTop = 0;
+  }));
+
+  // Delete user functions
   p.querySelectorAll<HTMLButtonElement>('button[data-d]').forEach(b => b.addEventListener('click', () => { removeFunction(b.dataset.d!); p.remove(); document.getElementById('btn-funcs')!.click(); }));
+
   document.getElementById('fn-s')!.addEventListener('click', () => {
     const rx = /function\s+(?:\[?(\w+)\]?\s*=\s*)?(\w+)\s*\(([^)]*)\)([\s\S]*?)(?:end|endfunction)/g;
     let m, c = 0;
