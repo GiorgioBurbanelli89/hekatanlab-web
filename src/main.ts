@@ -74,13 +74,18 @@ const editor = document.getElementById('editor') as HTMLTextAreaElement;
 const output = document.getElementById('output') as HTMLDivElement;
 const engine = createEngine();
 
-// Tab key
+// Helper: set editor text preserving undo history
+function setEditorText(text: string) {
+  editor.focus();
+  editor.select();
+  document.execCommand('insertText', false, text);
+}
+
+// Tab key — use execCommand to preserve undo
 editor.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     e.preventDefault();
-    const s = editor.selectionStart;
-    editor.value = editor.value.substring(0, s) + '  ' + editor.value.substring(editor.selectionEnd);
-    editor.selectionStart = editor.selectionEnd = s + 2;
+    document.execCommand('insertText', false, '  ');
   }
 });
 
@@ -112,13 +117,13 @@ function run() {
 }
 
 document.getElementById('btn-run')!.addEventListener('click', run);
-document.getElementById('btn-clear')!.addEventListener('click', () => { editor.value = ''; output.innerHTML = ''; engine.reset(); });
+document.getElementById('btn-clear')!.addEventListener('click', () => { setEditorText(''); output.innerHTML = ''; engine.reset(); });
 
 // Templates
 document.getElementById('template-select')!.addEventListener('change', (e) => {
   const sel = e.target as HTMLSelectElement;
   const t = TEMPLATES.find(x => x.name === sel.value);
-  if (t) { editor.value = t.code; run(); }
+  if (t) { setEditorText(t.code); run(); }
 });
 
 // Theme
@@ -251,9 +256,9 @@ document.getElementById('btn-import')!.addEventListener('click', () => {
       const ext = file.name.toLowerCase();
       try {
         if (ext.endsWith('.e2k')) {
-          editor.value = e2kToMatlab(parseE2k(text));
+          setEditorText(e2kToMatlab(parseE2k(text)));
         } else {
-          editor.value = s2kToMatlab(parseS2k(text));
+          setEditorText(s2kToMatlab(parseS2k(text)));
         }
         run();
       } catch (err: any) {
@@ -323,7 +328,7 @@ document.getElementById('btn-export')!.addEventListener('click', () => {
 
 // Help
 document.getElementById('btn-help')!.addEventListener('click', () => {
-  editor.value = `% HékatanLab Web — Ayuda
+  setEditorText(`% HékatanLab Web — Ayuda
 %
 % AUTORUN: se ejecuta al escribir (400ms)
 % Tab = indentar
@@ -350,4 +355,4 @@ document.getElementById('btn-help')!.addEventListener('click', () => {
 
 // Default
 const def = TEMPLATES.find(t => t.name === 'Operaciones básicas');
-if (def) { editor.value = def.code; run(); }
+if (def) { setEditorText(def.code); run(); }
