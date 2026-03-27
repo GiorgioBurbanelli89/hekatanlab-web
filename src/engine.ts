@@ -488,6 +488,128 @@ export function createEngine() {
         .filter(v => isFinite(v) && !isNaN(v) && v > 0).sort((a, b) => a - b);
       return math.matrix(ncrs.slice(0, Math.min(nModes, ncrs.length)));
     });
+
+    // buckling_plot(Kr, Gr, free, nn, L, mode_num) — plot buckling mode shape
+    p.set('buckling_plot', (...args: any[]) => {
+      const K = args[0], G = args[1];
+      let freeArr: number[];
+      const fa = args[2];
+      if (fa && typeof fa.toArray === 'function') freeArr = fa.toArray().flat().map(Number);
+      else if (Array.isArray(fa)) freeArr = fa.flat().map(Number);
+      else throw new Error('free must be an array');
+      const nn = Math.round(Number(args[3]));
+      const Lc = Number(args[4]);
+      const modeNum = (typeof args[5] === 'number') ? Math.round(args[5]) : 1;
+
+      let km: number[][] = K.toArray ? K.toArray() : K;
+      let gm: number[][] = G.toArray ? G.toArray() : G;
+      const sz = km.length;
+
+      // Cholesky: K = LL'
+      const Lm: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++)
+        for (let j = 0; j <= i; j++) {
+          let s = 0;
+          for (let k = 0; k < j; k++) s += Lm[i][k] * Lm[j][k];
+          Lm[i][j] = (i === j) ? Math.sqrt(Math.max(km[i][i] - s, 1e-30)) : (km[i][j] - s) / Lm[j][j];
+        }
+      const Li: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++) {
+        Li[i][i] = 1 / Lm[i][i];
+        for (let j = i + 1; j < sz; j++) {
+          let s = 0;
+          for (let k = i; k < j; k++) s += Lm[j][k] * Li[k][i];
+          Li[j][i] = -s / Lm[j][j];
+        }
+      }
+      // B = Li * G * Li'
+      const tmp2: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++)
+        for (let j = 0; j < sz; j++) {
+          let s = 0;
+          for (let k = 0; k < sz; k++) s += gm[i][k] * Li[j][k];
+          tmp2[i][j] = s;
+        }
+      const B2: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      for (let i = 0; i < sz; i++)
+        for (let j = 0; j < sz; j++) {
+          let s = 0;
+          for (let k = 0; k < sz; k++) s += Li[i][k] * tmp2[k][j];
+          B2[i][j] = s;
+        }
+      for (let i = 0; i < sz; i++)
+        for (let j = i + 1; j < sz; j++) {
+          const avg = (B2[i][j] + B2[j][i]) / 2;
+          B2[i][j] = avg; B2[j][i] = avg;
+        }
+
+      const res = math.eigs(math.matrix(B2));
+      let eigenvals: number[];
+      const vls = res.values;
+      if (vls && typeof vls.toArray === 'function') eigenvals = vls.toArray().flat().map(Number);
+      else eigenvals = Array.from(vls).map(Number);
+
+      // Eigenvectors (columns) — math.js v13 uses 'eigenvectors' not 'vectors'
+      let vecsMat: number[][];
+      const vm = (res as any).eigenvectors || (res as any).vectors;
+      if (vm && typeof vm.toArray === 'function') {
+        vecsMat = vm.toArray();
+      } else if (Array.isArray(vm) && vm[0] && vm[0].vector) {
+        // math.js 13 returns array of {value, vector} objects
+        const sz2 = vm.length;
+        vecsMat = Array.from({length: sz2}, () => Array(sz2).fill(0));
+        for (let c = 0; c < vm.length; c++) {
+          const vec = vm[c].vector.toArray ? vm[c].vector.toArray() : vm[c].vector;
+          const flat = Array.isArray(vec[0]) ? vec.flat() : vec;
+          for (let r = 0; r < flat.length; r++) vecsMat[r][c] = Number(flat[r]);
+        }
+        // Also remap eigenvalues to match vector order
+        eigenvals = vm.map((e: any) => Number(e.value));
+      } else {
+        vecsMat = vm as any;
+      }
+
+      // Sort: descending eigenvalue = ascending Ncr
+      const pairs = eigenvals.map((v, i) => ({ val: v, idx: i }))
+        .filter(pp => pp.val > 1e-12)
+        .sort((a, b) => b.val - a.val);
+
+      if (modeNum < 1 || modeNum > pairs.length) throw new Error(`Mode ${modeNum} not available`);
+      const mIdx = pairs[modeNum - 1].idx;
+      const Ncr_val = 1 / pairs[modeNum - 1].val;
+
+      // Eigenvector in transformed space
+      const yv: number[] = [];
+      for (let i = 0; i < sz; i++) yv.push(vecsMat[i][mIdx]);
+
+      // Back-transform: phi = Li' * y
+      const phi_r: number[] = Array(sz).fill(0);
+      for (let i = 0; i < sz; i++) {
+        let s = 0;
+        for (let k = 0; k < sz; k++) s += Li[k][i] * yv[k];
+        phi_r[i] = s;
+      }
+
+      // Map to full DOFs
+      const ndof = 2 * nn;
+      const phi_full: number[] = Array(ndof).fill(0);
+      for (let i = 0; i < freeArr.length && i < phi_r.length; i++) {
+        phi_full[freeArr[i] - 1] = phi_r[i];
+      }
+
+      // Extract lateral displacements (DOF 1,3,5,...,2nn-1 → index 0,2,4,...)
+      const xp: number[] = [];
+      const dp: number[] = [];
+      for (let i = 0; i < nn; i++) {
+        xp.push(i * Lc / (nn - 1));
+        dp.push(phi_full[2 * i]);
+      }
+      const maxD = Math.max(...dp.map(Math.abs));
+      const norm = maxD > 1e-15 ? dp.map(v => v / maxD) : dp;
+
+      return new PlotCommand({ type: 'line', x: xp, y: norm,
+        title: `Modo ${modeNum} (Ncr = ${Ncr_val.toFixed(2)} kN)` });
+    });
   }
 
   function toArray2DArg(v: any): number[][] {
@@ -707,7 +829,7 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
-      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx','freedofs','geneig',
+      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx','freedofs','geneig','buckling_plot',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',

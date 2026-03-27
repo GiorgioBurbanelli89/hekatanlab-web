@@ -668,7 +668,10 @@ Kr = submat(K, free);
 Gr = submat(G, free);
 
 % Resolver: K*phi = Ncr*G*phi
-Ncr = geneig(Kr, Gr, 5)` },
+Ncr = geneig(Kr, Gr, 5)
+
+% Forma modal del primer modo
+buckling_plot(Kr, Gr, free, nn, L, 1)` },
 
   { name: 'Buckling — Restricción continua', category: 'Buckling', code: `% ═══════════════════════════════════════════
 % Pandeo de columna — Restricción elástica continua
@@ -729,5 +732,8 @@ Kr = submat(K, free);
 Gr = submat(G, free);
 
 % Resolver: K*phi = Ncr*G*phi
-Ncr = geneig(Kr, Gr, 5)` },
+Ncr = geneig(Kr, Gr, 5)
+
+% Forma modal del primer modo
+buckling_plot(Kr, Gr, free, nn, L, 1)` },
 ];

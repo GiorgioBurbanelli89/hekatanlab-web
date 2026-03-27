@@ -93,9 +93,10 @@ document.getElementById('btn-clear')!.addEventListener('click', () => { editor.v
 
 // Templates
 document.getElementById('template-select')!.addEventListener('change', (e) => {
-  const t = TEMPLATES.find(x => x.name === (e.target as HTMLSelectElement).value);
+  const sel = e.target as HTMLSelectElement;
+  const t = TEMPLATES.find(x => x.name === sel.value);
   if (t) { editor.value = t.code; run(); }
-  (e.target as HTMLSelectElement).value = '';
+  // Keep showing selected template name (don't reset to "Ejemplos")
 });
 
 // Theme
