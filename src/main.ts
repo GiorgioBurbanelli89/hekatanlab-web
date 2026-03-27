@@ -132,6 +132,7 @@ document.getElementById('btn-theme')!.addEventListener('click', () => {
   dark = !dark;
   document.body.classList.toggle('light', !dark);
   (document.getElementById('btn-theme')!).textContent = dark ? '☀' : '🌙';
+  run(); // Re-render 3D views with new theme colors
 });
 
 // ── Functions Panel (inline below editor) ──

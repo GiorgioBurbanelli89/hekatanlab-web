@@ -1054,6 +1054,7 @@ export function createEngine() {
           if (kw === 'end' || kw === 'endfunction' || kw === 'clc' || kw === 'clear' || kw === 'clear all') continue;
           const { expr, suppress } = prepExpr(trimmed);
           if (!expr) continue;
+          if (insideLoop && trimmed.includes('assemble')) console.log('[DBG] for-body prepExpr:', trimmed, '→', expr);
           evalOneLine(stmt.text, stmt.startLine, suppress, expr);
 
         } else if (stmt.kind === 'for') {

@@ -23,7 +23,7 @@ export interface StructureViewData {
 }
 
 function isLight(): boolean { return document.body.classList.contains('light'); }
-function getBg(): number { return isLight() ? 0xf0f0f0 : 0x111118; }
+function getBg(): number { return isLight() ? 0xf5f5f5 : 0x0d0d12; }
 
 export class ViewCommand {
   constructor(public data: StructureViewData) {}
