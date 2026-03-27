@@ -611,6 +611,16 @@ export function createEngine() {
     // disp() — always shows output even inside loops (MATLAB behavior)
     parser.set('disp', (...args: any[]) => new DispCommand(args.length === 1 ? args[0] : args));
 
+    // Override norm() to handle column vectors (Nx1 matrices)
+    const origNorm = math.norm;
+    parser.set('norm', (v: any) => {
+      try { return origNorm(v); } catch {
+        try { return origNorm(math.flatten(v)); } catch {}
+        const arr = toNumArray(v);
+        return Math.sqrt(arr.reduce((s: number, x: number) => s + x * x, 0));
+      }
+    });
+
     // _setidx: MATLAB-style 1-based indexed assignment M(i,j) = val
     parser.set('_setidx', (...args: any[]) => {
       const M = args[0];
