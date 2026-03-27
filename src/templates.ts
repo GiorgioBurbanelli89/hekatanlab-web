@@ -556,7 +556,7 @@ disp("Desplazamientos (6 DOFs):")
 Uf
 
 % Deformada
-show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")` },
+show_deformed(nds, els, Uf, 5, 2, "Deformada (5x)")` },
 
   { name: 'FEM — Nave industrial 3D', category: 'FEM', code: `% Nave industrial 3D
 nds = [0,0,0; 12,0,0; 0,0,5; 12,0,5; 6,0,7; 0,6,0; 12,6,0; 0,6,5; 12,6,5; 6,6,7]
@@ -892,7 +892,7 @@ Fr = subvec(Fv, free)
 Ur = inv(Kr) * Fr
 Uf = fullvec(Ur, free, nDof)
 
-show_deformed(nds, els, Uf, 500, 2, "Deformada (500x)")` },
+show_deformed(nds, els, Uf, 5, 2, "Deformada (5x)")` },
 
   { name: 'Awatif — Estructura 3D', category: 'Awatif', code: `% ═══════════════════════════════════════════
 % Estructura 3D (awatif v2.0.0 3d-structure)
