@@ -318,41 +318,44 @@ show3d(nds, els, "Malla CST 3x2")` },
 
   // ── Mecánica Computacional ──
   { name: 'FEM — Barra axial', category: 'FEM', code: `% ═══════════════════════════════════════════
-% FEM: Barra axial — derivacion completa
+% FEM: Barra axial — derivacion desde cero
 % ═══════════════════════════════════════════
-
-% ── Funciones de forma (1D lineal) ──
-% N1(xi) = 1 - xi/L = (L - x)/L
-% N2(xi) = xi/L = x/L
-% donde xi in [0, L]
-disp("Funciones de forma 1D lineales:")
-disp("N1(x) = (L - x) / L")
-disp("N2(x) = x / L")
-
-% ── Derivadas ──
-% dN1/dx = -1/L
-% dN2/dx = 1/L
-% B = [-1/L, 1/L]
-disp("Matriz B = dN/dx = [-1/L, 1/L]")
-
-% ── Rigidez: K = integral(B'*E*A*B, 0, L) ──
-% K = E*A/L * [1, -1; -1, 1]
-disp("K = E*A/L * [1,-1; -1,1]")
 
 L = 2
 E = 210000
 A = 0.01
 
-% Rigidez local
-k = E * A / L
-K = k * [1, -1; -1, 1]
+% ══ PASO 1: Funciones de forma ══
+% N1(x) = (L-x)/L = 1 - x/L
+% N2(x) = x/L
+% Evaluamos en x=0 y x=L para verificar:
+disp("N1(0)=1, N1(L)=0 — vale 1 en nodo 1")
+disp("N2(0)=0, N2(L)=1 — vale 1 en nodo 2")
 
-% Carga
+% ══ PASO 2: Derivadas → Matriz B ══
+% B = dN/dx = [dN1/dx, dN2/dx]
+% dN1/dx = -1/L,  dN2/dx = 1/L
+B = [-1/L, 1/L]
+
+% ══ PASO 3: B'*B (producto exterior) ══
+BtB = transpose(B) * B
+
+% ══ PASO 4: Rigidez K = integral(B'*E*A*B dx, 0, L) ══
+% Como B es constante, integral = B'*E*A*B * L
+K = E * A * L * BtB
+
+% Verificar: K = EA/L * [1,-1; -1,1]
+disp("K = EA/L * [1,-1; -1,1] ?")
+K_check = E * A / L * [1, -1; -1, 1]
+
+% ══ PASO 5: Carga y solucion ══
 q = 5
-F_dist = [q * L / 2; q * L / 2]
 P = 20
 
-% Resolver (nodo 1 fijo)
+% Vector de fuerzas equivalentes (carga distribuida)
+F_dist = [q * L / 2; q * L / 2]
+
+% Resolver (nodo 1 fijo → solo DOF 2 libre)
 K_red = K(2, 2)
 F_red = q * L / 2 + P
 u2 = F_red / K_red
@@ -600,59 +603,61 @@ show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
 
   { name: 'FEM — Placa CST', category: 'FEM', code: `% ═══════════════════════════════════════════
 % FEM: Triangulo CST (Constant Strain Triangle)
-% Plane Stress — derivacion completa
+% Plane Stress — derivacion desde cero
 % ═══════════════════════════════════════════
 
 E = 30e6;
 nu = 0.25;
 t = 1;
 
-% ── Funciones de forma (CST) ──
-% N1 = 1 - xi - eta
-% N2 = xi
-% N3 = eta
-% Coordenadas naturales: (xi, eta) en [0,1]
+% ══ PASO 1: Funciones de forma ══
+% Coordenadas naturales (xi, eta) en triangulo [0,1]
+% N1(xi,eta) = 1 - xi - eta   (vale 1 en nodo 1)
+% N2(xi,eta) = xi              (vale 1 en nodo 2)
+% N3(xi,eta) = eta             (vale 1 en nodo 3)
+disp("N1 = 1-xi-eta,  N2 = xi,  N3 = eta")
 
-disp("Funciones de forma CST:")
-disp("N1 = 1 - xi - eta")
-disp("N2 = xi")
-disp("N3 = eta")
+% ══ PASO 2: Derivadas de N ══
+dNdxi = [-1, 1, 0]
+dNdeta = [-1, 0, 1]
 
-% ── Derivadas de N ──
-% dN/d(xi)  = [-1, 1, 0]
-% dN/d(eta) = [-1, 0, 1]
-disp("Derivadas dN/dxi = [-1, 1, 0]")
-disp("Derivadas dN/deta = [-1, 0, 1]")
-
-% ── Nodos y conectividad ──
+% ══ PASO 3: Nodos del elemento 1 ══
 nds = [0,0,0; 2,0,0; 2,1,0; 0,1,0]
 els = [1,2,3; 1,3,4]
 show3d(nds, els, "Placa CST (2 triangulos)", [1,4])
 
-% ── Jacobiano para elemento 1 (nodos 1,2,3) ──
-disp("--- Elemento 1: nodos (0,0), (2,0), (2,1) ---")
 x1 = 0; y1 = 0; x2 = 2; y2 = 0; x3 = 2; y3 = 1;
 
-% J = [x2-x1, y2-y1; x3-x1, y3-y1]
+% ══ PASO 4: Jacobiano ══
+% J = [dx/dxi, dy/dxi; dx/deta, dy/deta]
+% x = N1*x1 + N2*x2 + N3*x3 → dx/dxi = -x1+x2, dx/deta = -x1+x3
 J = [x2 - x1, y2 - y1; x3 - x1, y3 - y1]
 detJ = det(J)
-disp("Area = |det(J)|/2:")
 Area = abs(detJ) / 2
 
-% ── Matriz B (deformacion-desplazamiento) ──
-% B = (1/det(J)) * [b1,0,b2,0,b3,0; 0,c1,0,c2,0,c3; c1,b1,c2,b2,c3,b3]
-% donde bi = yi_next - yi_prev, ci = xi_prev - xi_next
-b1 = y2 - y3; b2 = y3 - y1; b3 = y1 - y2;
-c1 = x3 - x2; c2 = x1 - x3; c3 = x2 - x1;
-B = (1/detJ) * [b1,0,b2,0,b3,0; 0,c1,0,c2,0,c3; c1,b1,c2,b2,c3,b3]
+% ══ PASO 5: Jacobiano inverso ══
+Jinv = inv(J)
 
-% ── Matriz D (constitutiva - plane stress) ──
-% D = E/(1-nu^2) * [1,nu,0; nu,1,0; 0,0,(1-nu)/2]
+% ══ PASO 6: Derivadas en coord. fisicas ══
+% [dN/dx; dN/dy] = J^-1 * [dN/dxi; dN/deta]
+dNdx = Jinv(1,1) * dNdxi + Jinv(1,2) * dNdeta
+dNdy = Jinv(2,1) * dNdxi + Jinv(2,2) * dNdeta
+
+% ══ PASO 7: Matriz B (3x6) ══
+% epsilon = B * u
+% [exx; eyy; gxy] = B * [u1,v1,u2,v2,u3,v3]'
+B = [dNdx(1),0,dNdx(2),0,dNdx(3),0; 0,dNdy(1),0,dNdy(2),0,dNdy(3); dNdy(1),dNdx(1),dNdy(2),dNdx(2),dNdy(3),dNdx(3)]
+
+% ══ PASO 8: Matriz D constitutiva (plane stress) ══
+% sigma = D * epsilon
 D = (E / (1 - nu^2)) * [1, nu, 0; nu, 1, 0; 0, 0, (1 - nu) / 2]
 
-% ── Rigidez elemental ──
-% Ke = t * Area * B' * D * B
-Ke = t * Area * transpose(B) * D * B
+% ══ PASO 9: B'*D*B ══
+BtDB = transpose(B) * D * B
+
+% ══ PASO 10: Rigidez Ke = t * Area * B'*D*B ══
+% integral(B'*D*B, dA) = B'*D*B * Area  (B constante en CST)
+Ke = t * Area * BtDB
 
 % ── Ensamblaje ──
 dofs = [1,2,3,4,5,6; 1,2,5,6,7,8]
@@ -753,33 +758,53 @@ Uf = fullvec(Ur, free, nDof)` },
 % Derivacion completa con funciones de forma
 % ═══════════════════════════════════════════
 
-% ── Funciones de forma Hermite (viga Euler-Bernoulli) ──
-% Axial: N1 = 1-x/L, N2 = x/L (lineales)
-% Flexion (polinomios cubicos):
-%   H1(xi) = 1 - 3*xi^2 + 2*xi^3      (desplazamiento nodo i)
-%   H2(xi) = L*xi*(1 - xi)^2           (rotacion nodo i)
-%   H3(xi) = 3*xi^2 - 2*xi^3           (desplazamiento nodo j)
-%   H4(xi) = L*xi^2*(xi - 1)           (rotacion nodo j)
-%   donde xi = x/L
-disp("Funciones de forma Hermite (viga):")
-disp("H1 = 1 - 3*xi^2 + 2*xi^3")
-disp("H2 = L*xi*(1-xi)^2")
-disp("H3 = 3*xi^2 - 2*xi^3")
-disp("H4 = L*xi^2*(xi-1)")
-
-% ── Matriz de rigidez local 6x6 ──
-% K = [EA/L, 0, 0, -EA/L, 0, 0;
-%      0, 12EI/L^3, 6EI/L^2, 0, -12EI/L^3, 6EI/L^2;
-%      0, 6EI/L^2, 4EI/L, 0, -6EI/L^2, 2EI/L;
-%      -EA/L, 0, 0, EA/L, 0, 0;
-%      0, -12EI/L^3, -6EI/L^2, 0, 12EI/L^3, -6EI/L^2;
-%      0, 6EI/L^2, 2EI/L, 0, -6EI/L^2, 4EI/L]
-disp("K_local = f(EA/L, 12EI/L^3, 6EI/L^2, 4EI/L, 2EI/L)")
+% ══ PASO 1: Funciones de forma ══
+% Axial (lineales): N1 = 1-xi, N2 = xi  (xi = x/L)
+% Flexion (Hermite cubicos):
+%   H1(xi) = 1 - 3xi^2 + 2xi^3
+%   H2(xi) = L*xi*(1-xi)^2
+%   H3(xi) = 3xi^2 - 2xi^3
+%   H4(xi) = L*xi^2*(xi-1)
 
 % Propiedades (kN, m)
 E = 200e6;
 A = 0.01;
 I_sec = 8.33e-5;
+Lv = 4;
+
+% ══ PASO 2: Derivadas segunda (curvatura) ══
+% d2H1/dx2 = (1/L^2)*(-6 + 12*xi)
+% d2H2/dx2 = (1/L)*(- 4 + 6*xi)
+% d2H3/dx2 = (1/L^2)*(6 - 12*xi)
+% d2H4/dx2 = (1/L)*(-2 + 6*xi)
+
+% ══ PASO 3: Rigidez axial ══
+% Ka = integral(B_ax'*EA*B_ax, 0, L)
+% B_ax = [-1/L, 1/L]
+ea = E * A / Lv
+Ka = ea * [1, -1; -1, 1]
+
+% ══ PASO 4: Rigidez flexion ══
+% Kb = integral(B_flex'*EI*B_flex, 0, L)
+% Integrando analiticamnete los polinomios Hermite:
+EIL = E * I_sec;
+a = 12 * EIL / Lv^3;
+b = 6 * EIL / Lv^2;
+c4 = 4 * EIL / Lv;
+c2 = 2 * EIL / Lv;
+Kb = [a, b, -a, b; b, c4, -b, c2; -a, -b, a, -b; b, c2, -b, c4]
+
+% ══ PASO 5: Ensamblar K_local 6x6 ══
+% DOFs: [u1, w1, theta1, u2, w2, theta2]
+% Axial en DOFs 1,4; Flexion en DOFs 2,3,5,6
+Ke_local = zeros(6, 6);
+Ke_local(1,1) = Ka(1,1); Ke_local(1,4) = Ka(1,2);
+Ke_local(4,1) = Ka(2,1); Ke_local(4,4) = Ka(2,2);
+Ke_local(2,2) = Kb(1,1); Ke_local(2,3) = Kb(1,2); Ke_local(2,5) = Kb(1,3); Ke_local(2,6) = Kb(1,4);
+Ke_local(3,2) = Kb(2,1); Ke_local(3,3) = Kb(2,2); Ke_local(3,5) = Kb(2,3); Ke_local(3,6) = Kb(2,4);
+Ke_local(5,2) = Kb(3,1); Ke_local(5,3) = Kb(3,2); Ke_local(5,5) = Kb(3,3); Ke_local(5,6) = Kb(3,4);
+Ke_local(6,2) = Kb(4,1); Ke_local(6,3) = Kb(4,2); Ke_local(6,5) = Kb(4,3); Ke_local(6,6) = Kb(4,4);
+Ke_local
 
 % Nodos [x, y, z]
 nds = [0,0,0; 0,0,4; 6,0,4; 6,0,0]
