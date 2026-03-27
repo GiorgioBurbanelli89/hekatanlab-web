@@ -601,6 +601,68 @@ els = [1,3; 2,4; 3,5; 4,5; 6,8; 7,9; 8,10; 9,10; 3,8; 4,9; 5,10]
 
 show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
 
+  { name: 'FEM — Placa Delaunay (Shewchuk)', category: 'FEM', code: `% ═══════════════════════════════════════════
+% Placa con malla Delaunay (Triangle de Shewchuk)
+% Triangulacion automatica de calidad
+% ═══════════════════════════════════════════
+
+% Vertices del poligono
+points = [0,0,0; 15,0,0; 15,10,0; 0,5,0]
+
+% Poligono (indices 0-based para getMesh)
+polygon = [0, 1, 2, 3]
+
+% Generar malla Delaunay (max area = 3, min angle = 30)
+[nds, els, bnd] = getMesh(points, polygon, 3, 30)
+
+disp("Nodos generados:")
+disp(size(nds, 1))
+disp("Triangulos generados:")
+disp(size(els, 1))
+
+show3d(nds, els, "Placa Delaunay")
+
+% Propiedades
+E = 100; nu = 0.3; t = 1;
+
+% Ensamblaje CST
+nNodes = size(nds, 1)
+nDof = nNodes * 2
+Kg = zeros(nDof, nDof)
+nElem = size(els, 1)
+
+for e = range(1, nElem, 1)
+  n1 = els(e,1); n2 = els(e,2); n3 = els(e,3);
+  Ke = k_cst(E, nu, t, nds(n1,1),nds(n1,2), nds(n2,1),nds(n2,2), nds(n3,1),nds(n3,2));
+  d1 = (n1-1)*2; d2 = (n2-1)*2; d3 = (n3-1)*2;
+  d = [d1+1,d1+2, d2+1,d2+2, d3+1,d3+2];
+  Kg = assemble(Kg, Ke, d);
+end
+
+% BC: bordes fijos (nodos del borde)
+nBnd = length(bnd)
+fixed = [];
+for i = range(1, nBnd, 1)
+  nb = bnd(i);
+  fixed = [fixed, (nb-1)*2+1, (nb-1)*2+2];
+end
+
+% Carga: Fy = -3 en todos los nodos
+Fv = zeros(nDof, 1)
+for i = range(1, nNodes, 1)
+  Fv((i-1)*2 + 2) = -3;
+end
+
+% Resolver
+free = freedofs(nDof, fixed)
+Kr = submat(Kg, free)
+Fr = subvec(Fv, free)
+Ur = inv(Kr) * Fr
+Uf = fullvec(Ur, free, nDof)
+
+% Deformada
+show_deformed(nds, els, Uf, 50, 2, "Deformada Delaunay (50x)")` },
+
   { name: 'FEM — Shell Tri (placa)', category: 'FEM', code: `% ═══════════════════════════════════════════
 % Shell Triangular 18 DOF — Placa con carga
 % Derivacion: Membrana + DKT Bending + Shear

@@ -7,6 +7,10 @@ import { parseE2k, e2kToMatlab } from './e2kParser';
 import { exportS2k, type S2kExportData } from './s2kExporter';
 import { exportE2k, type E2kExportData } from './e2kExporter';
 import { femMatlabLibrary } from './fem-matlab';
+import { initTriangle } from './wasm/triangleMesh';
+
+// Pre-load Triangle WASM in background
+initTriangle().catch(e => console.warn('Triangle WASM load failed:', e));
 
 // ── Build UI ──
 const categories = [...new Set(TEMPLATES.map(t => t.category))];
@@ -105,10 +109,10 @@ document.getElementById('btn-autorun')!.addEventListener('click', () => {
   btn.title = autorunEnabled ? 'Autorun ON' : 'Autorun OFF';
 });
 
-function run() {
+async function run() {
   const code = editor.value;
   const t0 = performance.now();
-  const results = engine.evaluate(code);
+  const results = await engine.evaluate(code);
   const dt = (performance.now() - t0).toFixed(0);
   renderOutput(output, results, editor);
   (document.getElementById('status-lines')!).textContent = `${code.split('\n').length} líneas`;
@@ -287,8 +291,8 @@ document.getElementById('btn-export')!.addEventListener('click', () => {
     </div>`;
   document.body.appendChild(p);
 
-  const extractData = () => {
-    engine.evaluate(editor.value);
+  const extractData = async () => {
+    await engine.evaluate(editor.value);
     const scope = engine.getScope();
     const toArr = (v: any): number[][] => {
       if (!v) return [];

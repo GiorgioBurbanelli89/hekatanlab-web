@@ -3,6 +3,7 @@ import { PlotCommand } from './plotter';
 import { ViewCommand } from './viewer3d';
 import { k_truss2d, k_frame2d, k_frame3d, T2d, T3d, assemble, k_cst, k_q4 } from './fem';
 import { femMatlabLibrary } from './fem-matlab';
+import { getMesh as triangleMeshAsync, isTriangleReady } from './wasm/triangleMesh';
 // @ts-ignore
 import nerdamer from 'nerdamer';
 // @ts-ignore
@@ -712,9 +713,64 @@ export function createEngine() {
     return [];
   }
 
-  function evaluate(code: string): EvalResult[] {
+  async function evaluate(code: string): Promise<EvalResult[]> {
+    // 0. Pre-process async getMesh() calls
+    // Find: [nds, els, bnd] = getMesh(points, polygon, maxArea)
+    // Execute async, inject results as matrix literals
+    let processedCode = code;
+    const meshMatch = code.match(/\[(\w+)\s*,\s*(\w+)(?:\s*,\s*(\w+))?\]\s*=\s*getMesh\(([^)]+)\)/);
+    if (meshMatch) {
+      try {
+        const args = meshMatch[4].split(';').map(s => s.trim());
+        // Parse points from code: e.g. "points" variable or inline [[0,0],[1,0],...]
+        // For now, evaluate the args using a temp parser
+        const tmpParser = math.parser();
+        // Execute all lines up to getMesh to get variable values
+        const lines = code.split('\n');
+        for (const line of lines) {
+          const t = line.trim();
+          if (t.includes('getMesh')) break;
+          if (!t || t.startsWith('%') || t.startsWith('function')) continue;
+          try { tmpParser.evaluate(t.replace(/'/g, '"')); } catch {}
+        }
+        // Get the argument values
+        const argParts = meshMatch[4].split(',').map(s => s.trim());
+        let pts: number[][] = [];
+        let poly: number[] = [];
+        let maxArea = 3;
+        let minAngle = 30;
+        try {
+          const ptsVal = tmpParser.evaluate(argParts[0]);
+          pts = ptsVal.toArray ? ptsVal.toArray() : ptsVal;
+          const polyVal = tmpParser.evaluate(argParts[1]);
+          poly = (polyVal.toArray ? polyVal.toArray() : polyVal).flat().map(Number);
+          if (argParts[2]) maxArea = Number(tmpParser.evaluate(argParts[2]));
+          if (argParts[3]) minAngle = Number(tmpParser.evaluate(argParts[3]));
+        } catch (e: any) {
+          console.warn('getMesh arg parse error:', e.message);
+        }
+        if (pts.length >= 3) {
+          const result = await triangleMeshAsync(pts, poly, maxArea, minAngle);
+          // Inject results: replace getMesh call with matrix assignments
+          const ndsName = meshMatch[1];
+          const elsName = meshMatch[2];
+          const bndName = meshMatch[3];
+          const ndsStr = result.nodes.map(r => r.join(',')).join('; ');
+          const elsStr = result.elements.map(r => r.map(x => x + 1).join(',')).join('; '); // 0→1 based
+          let replacement = `${ndsName} = [${ndsStr}]\n${elsName} = [${elsStr}]`;
+          if (bndName) {
+            const bndStr = result.boundaryIndices.map(x => x + 1).join(','); // 0→1 based
+            replacement += `\n${bndName} = [${bndStr}]`;
+          }
+          processedCode = processedCode.replace(meshMatch[0], replacement);
+        }
+      } catch (e: any) {
+        console.warn('getMesh pre-process error:', e.message);
+      }
+    }
+
     // 1. Parse function definitions
-    const { functions: codeFunctions, cleanCode } = parseMatlabFunctions(code);
+    const { functions: codeFunctions, cleanCode } = parseMatlabFunctions(processedCode);
 
     // 2. Reset parser
     parser = math.parser();
@@ -960,7 +1016,7 @@ export function createEngine() {
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
       'T2d_truss','truss2d_Ke','truss3d_Ke',
       'meshRect_nodes','meshRect_cst','gen_truss_nodes','gen_truss_elements',
-      'gen_tower_nodes','gen_tower_elements','fixed_left_edge',
+      'gen_tower_nodes','gen_tower_elements','fixed_left_edge','getMesh',
       'assemble_k','solve_fem','reactions',
       'buildIsoDb','buildIsoDs','buildIsoQm','shell_bending_B','shell_shear_B','shell_membrane_K9','k_shell_tri',
       'show3d','show_deformed','show_contour','show_diagram','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
