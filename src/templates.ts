@@ -620,13 +620,12 @@ Uf = fullvec(Ur, free, nDof)` },
 E = 20000;
 I_sec = 1673;
 L = 1500;
-nk = 1;
-step_seg = 5;
+nk = 4;
+step_seg = 10;
+k_node = 20;
 
 % ── Solución analítica ──
 Ne = pi^2 * E * I_sec / L^2
-KT = 16 * Ne / L
-Ncrit_exact = 4 * Ne
 
 % ── FEM ──
 ne = step_seg * (nk + 1);
@@ -654,11 +653,11 @@ for e = range(1, ne, 1)
   G = assemble(G, Ge, [d1, d2, d3, d4]);
 end
 
-% Agregar resorte discreto central
+% Agregar resortes discretos
 for s = range(1, nk, 1)
   node_s = s * step_seg + 1;
   dof_s = 2 * node_s - 1;
-  K = assemble(K, [[KT]], [dof_s]);
+  K = assemble(K, [[k_node]], [dof_s]);
 end
 
 % BCs: articulado-articulado (v=0 en extremos)

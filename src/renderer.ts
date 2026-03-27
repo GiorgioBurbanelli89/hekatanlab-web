@@ -55,7 +55,22 @@ export function renderOutput(container: HTMLElement, results: EvalResult[], edit
 
       case 'expr':
         if (r.formatted) {
-          div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
+          // Try KaTeX for standalone expressions (matrices, numbers)
+          const katexExpr = valueToKatex('ans', r.value);
+          if (katexExpr) {
+            // Remove "ans = " prefix — show just the value
+            const bareKatex = katexExpr.replace(/^(\\text\{ans\}|ans)\s*=\s*/, '');
+            const mathDivE = document.createElement('div');
+            mathDivE.style.margin = '4px 0';
+            try {
+              katex.render(bareKatex, mathDivE, { throwOnError: false, displayMode: true });
+              div.appendChild(mathDivE);
+            } catch {
+              div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
+            }
+          } else {
+            div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
+          }
         } else {
           div.style.display = 'none'; // suppressed with ;
         }

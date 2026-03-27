@@ -490,8 +490,9 @@ export function createEngine() {
     });
 
     // buckling_plot(Kr, Gr, free, nn, L, mode_num) — plot buckling mode shape
+    // Uses inverse iteration (shift-invert) to get eigenvector reliably
     p.set('buckling_plot', (...args: any[]) => {
-      const K = args[0], G = args[1];
+      const Km = args[0], Gm = args[1];
       let freeArr: number[];
       const fa = args[2];
       if (fa && typeof fa.toArray === 'function') freeArr = fa.toArray().flat().map(Number);
@@ -501,94 +502,70 @@ export function createEngine() {
       const Lc = Number(args[4]);
       const modeNum = (typeof args[5] === 'number') ? Math.round(args[5]) : 1;
 
-      let km: number[][] = K.toArray ? K.toArray() : K;
-      let gm: number[][] = G.toArray ? G.toArray() : G;
+      // Get Ncr values first (reuse geneig logic via parser)
+      let km: number[][] = Km.toArray ? Km.toArray() : Km;
+      let gm: number[][] = Gm.toArray ? Gm.toArray() : Gm;
       const sz = km.length;
 
-      // Cholesky: K = LL'
-      const Lm: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      // Quick eigenvalue solve via Cholesky (same as geneig)
+      const Lch: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
       for (let i = 0; i < sz; i++)
         for (let j = 0; j <= i; j++) {
           let s = 0;
-          for (let k = 0; k < j; k++) s += Lm[i][k] * Lm[j][k];
-          Lm[i][j] = (i === j) ? Math.sqrt(Math.max(km[i][i] - s, 1e-30)) : (km[i][j] - s) / Lm[j][j];
+          for (let k = 0; k < j; k++) s += Lch[i][k] * Lch[j][k];
+          Lch[i][j] = (i === j) ? Math.sqrt(Math.max(km[i][i] - s, 1e-30)) : (km[i][j] - s) / Lch[j][j];
         }
-      const Li: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
+      const Linv: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
       for (let i = 0; i < sz; i++) {
-        Li[i][i] = 1 / Lm[i][i];
+        Linv[i][i] = 1 / Lch[i][i];
         for (let j = i + 1; j < sz; j++) {
           let s = 0;
-          for (let k = i; k < j; k++) s += Lm[j][k] * Li[k][i];
-          Li[j][i] = -s / Lm[j][j];
+          for (let k = i; k < j; k++) s += Lch[j][k] * Linv[k][i];
+          Linv[j][i] = -s / Lch[j][j];
         }
       }
-      // B = Li * G * Li'
       const tmp2: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
       for (let i = 0; i < sz; i++)
         for (let j = 0; j < sz; j++) {
-          let s = 0;
-          for (let k = 0; k < sz; k++) s += gm[i][k] * Li[j][k];
+          let s = 0; for (let k = 0; k < sz; k++) s += gm[i][k] * Linv[j][k];
           tmp2[i][j] = s;
         }
       const B2: number[][] = Array.from({length: sz}, () => Array(sz).fill(0));
       for (let i = 0; i < sz; i++)
         for (let j = 0; j < sz; j++) {
-          let s = 0;
-          for (let k = 0; k < sz; k++) s += Li[i][k] * tmp2[k][j];
+          let s = 0; for (let k = 0; k < sz; k++) s += Linv[i][k] * tmp2[k][j];
           B2[i][j] = s;
         }
       for (let i = 0; i < sz; i++)
-        for (let j = i + 1; j < sz; j++) {
-          const avg = (B2[i][j] + B2[j][i]) / 2;
-          B2[i][j] = avg; B2[j][i] = avg;
-        }
+        for (let j = i + 1; j < sz; j++) { const a = (B2[i][j]+B2[j][i])/2; B2[i][j]=a; B2[j][i]=a; }
 
       const res = math.eigs(math.matrix(B2));
-      let eigenvals: number[];
+      let ev: number[];
       const vls = res.values;
-      if (vls && typeof vls.toArray === 'function') eigenvals = vls.toArray().flat().map(Number);
-      else eigenvals = Array.from(vls).map(Number);
+      if (vls && typeof vls.toArray === 'function') ev = vls.toArray().flat().map(Number);
+      else ev = Array.from(vls).map(Number);
+      const ncrs = ev.filter(v => v > 1e-12).map(v => 1/v)
+        .filter(v => isFinite(v) && !isNaN(v) && v > 0).sort((a, b) => a - b);
 
-      // Eigenvectors (columns) — math.js v13 uses 'eigenvectors' not 'vectors'
-      let vecsMat: number[][];
-      const vm = (res as any).eigenvectors || (res as any).vectors;
-      if (vm && typeof vm.toArray === 'function') {
-        vecsMat = vm.toArray();
-      } else if (Array.isArray(vm) && vm[0] && vm[0].vector) {
-        // math.js 13 returns array of {value, vector} objects
-        const sz2 = vm.length;
-        vecsMat = Array.from({length: sz2}, () => Array(sz2).fill(0));
-        for (let c = 0; c < vm.length; c++) {
-          const vec = vm[c].vector.toArray ? vm[c].vector.toArray() : vm[c].vector;
-          const flat = Array.isArray(vec[0]) ? vec.flat() : vec;
-          for (let r = 0; r < flat.length; r++) vecsMat[r][c] = Number(flat[r]);
-        }
-        // Also remap eigenvalues to match vector order
-        eigenvals = vm.map((e: any) => Number(e.value));
-      } else {
-        vecsMat = vm as any;
+      if (modeNum < 1 || modeNum > ncrs.length) throw new Error(`Mode ${modeNum} not available`);
+      const Ncr_target = ncrs[modeNum - 1];
+
+      // Inverse iteration (shift-invert) for eigenvector
+      const sigma = Ncr_target * 0.99999;
+      const KsG = math.subtract(math.matrix(km), math.multiply(sigma, math.matrix(gm)));
+      const KsG_inv = math.inv(KsG);
+      const Gmat = math.matrix(gm);
+
+      // Start with random initial vector
+      let phi_vec = math.matrix(Array.from({length: sz}, () => [Math.random() - 0.5]));
+      for (let iter = 0; iter < 30; iter++) {
+        phi_vec = math.multiply(KsG_inv, math.multiply(Gmat, phi_vec));
+        const n2 = Math.sqrt(Number(math.dot(math.flatten(phi_vec), math.flatten(phi_vec))));
+        if (n2 > 1e-30) phi_vec = math.divide(phi_vec, n2);
       }
 
-      // Sort: descending eigenvalue = ascending Ncr
-      const pairs = eigenvals.map((v, i) => ({ val: v, idx: i }))
-        .filter(pp => pp.val > 1e-12)
-        .sort((a, b) => b.val - a.val);
-
-      if (modeNum < 1 || modeNum > pairs.length) throw new Error(`Mode ${modeNum} not available`);
-      const mIdx = pairs[modeNum - 1].idx;
-      const Ncr_val = 1 / pairs[modeNum - 1].val;
-
-      // Eigenvector in transformed space
-      const yv: number[] = [];
-      for (let i = 0; i < sz; i++) yv.push(vecsMat[i][mIdx]);
-
-      // Back-transform: phi = Li' * y
-      const phi_r: number[] = Array(sz).fill(0);
-      for (let i = 0; i < sz; i++) {
-        let s = 0;
-        for (let k = 0; k < sz; k++) s += Li[k][i] * yv[k];
-        phi_r[i] = s;
-      }
+      // Extract to flat array
+      const phi_r: number[] = math.flatten(phi_vec).toArray().map(Number);
 
       // Map to full DOFs
       const ndof = 2 * nn;
@@ -608,7 +585,7 @@ export function createEngine() {
       const norm = maxD > 1e-15 ? dp.map(v => v / maxD) : dp;
 
       return new PlotCommand({ type: 'line', x: xp, y: norm,
-        title: `Modo ${modeNum} (Ncr = ${Ncr_val.toFixed(2)} kN)` });
+        title: `Buckling Mode ${modeNum} (Ncr = ${Ncr_target.toFixed(2)} kN)` });
     });
   }
 
@@ -633,6 +610,26 @@ export function createEngine() {
     loadFemFunctions(parser);
     // disp() — always shows output even inside loops (MATLAB behavior)
     parser.set('disp', (...args: any[]) => new DispCommand(args.length === 1 ? args[0] : args));
+
+    // _setidx: MATLAB-style 1-based indexed assignment M(i,j) = val
+    parser.set('_setidx', (...args: any[]) => {
+      const M = args[0];
+      const val = args[args.length - 1];
+      if (args.length === 3) {
+        // Single index: M(i) = val
+        const i = Math.round(Number(args[1])) - 1;
+        try { return math.subset(M, math.index(i), val); } catch {}
+        try { return math.subset(M, math.index(i, 0), val); } catch {}
+        throw new Error(`Cannot set index ${i+1}`);
+      }
+      if (args.length === 4) {
+        // Double index: M(i,j) = val
+        const i = Math.round(Number(args[1])) - 1;
+        const j = Math.round(Number(args[2])) - 1;
+        return math.subset(M, math.index(i, j), val);
+      }
+      throw new Error('Invalid index assignment');
+    });
 
     // _idx: MATLAB-style 1-based indexing that works for vectors and matrices
     parser.set('_idx', (...args: any[]) => {
@@ -829,7 +826,7 @@ export function createEngine() {
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
-      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx','freedofs','geneig','buckling_plot',
+      'show3d','show_deformed','show_contour','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
       'random','factorial','permutations','combinations','gcd','lcm',
       'mod','pow','nthRoot','cbrt','square','cube',
       'complex','re','im','conj','arg',
@@ -867,6 +864,23 @@ export function createEngine() {
       expr = expr.replace(/'([^']*?)'/g, '"$1"');
       expr = expr.replace(/(\w+)'/g, 'transpose($1)');
       expr = expr.replace(/(\w+)\s*\\\s*(\w+)/g, 'inv($1) * $2');
+
+      // Indexed assignment: M(i,j) = expr → M = _setidx(M, i, j, expr)
+      const idxAssign = expr.match(/^([a-zA-Z_]\w*)\s*\(([^)]+)\)\s*=\s*(.+)$/);
+      if (idxAssign && knownVars.has(idxAssign[1])) {
+        const vn = idxAssign[1];
+        const indices = idxAssign[2].split(',').map((s: string) => s.trim());
+        let rhs = idxAssign[3].trim();
+        // Apply _idx to RHS (reads only)
+        rhs = rhs.replace(/\b([a-zA-Z_]\w*)\s*\(([^)]+)\)/g, (match: string, name: string, args: string) => {
+          if (builtinFuncs.has(name) || userFunctions.has(name) || !knownVars.has(name)) return match;
+          return `_idx(${name}, ${args.split(',').map((a: string) => a.trim()).join(', ')})`;
+        });
+        expr = `${vn} = _setidx(${vn}, ${indices.join(', ')}, ${rhs})`;
+        return { expr, suppress };
+      }
+
+      // Normal _idx replacement for reads
       expr = expr.replace(/\b([a-zA-Z_]\w*)\s*\(([^)]+)\)/g, (match, name, args) => {
         if (builtinFuncs.has(name) || userFunctions.has(name) || !knownVars.has(name)) return match;
         const indices = args.split(',').map((a: string) => a.trim());
