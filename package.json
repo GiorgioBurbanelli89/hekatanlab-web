@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@babel/runtime": "^7.26.0",
     "katex": "^0.16.0",
     "mathjs": "^13.0.0",
     "nerdamer": "^1.1.13",

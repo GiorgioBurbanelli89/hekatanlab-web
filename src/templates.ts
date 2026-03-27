@@ -446,52 +446,43 @@ hist(datos, 20, "Distribución (suma de uniformes)")` },
   // ══════════════════════════════════════════
 
 
-  { name: 'FEM — Truss 2D (3 barras)', category: 'FEM', code: `% Truss 2D - 3 barras
-E = 200e3
-Asec = 0.01
+  { name: 'FEM — Truss 2D (3 barras)', category: 'FEM', code: `% Truss 2D - 3 barras con ensamblaje automatico
+E = 200e3;
+Asec = 0.01;
 
-% Nodos y elementos
+% Nodos [x,y,z] y conectividad [n1,n2]
 nds = [0,0,0; 4,0,0; 2,0,3]
 els = [1,3; 2,3; 1,2]
 show3d(nds, els, "Truss 2D - 3 barras", [1,2])
 
-% Longitudes y angulos
-L1 = sqrt(2^2 + 3^2)
-L2 = sqrt(2^2 + 3^2)
-L3 = 4
-th1 = atan2(3, 2)
-th2 = atan2(3, -2)
+% DOFs por elemento: 2 DOF/nodo (ux,uy)
+dofs = [1,2,5,6; 3,4,5,6; 1,2,3,4]
 
-% Elemento 1: nodo 1-3, DOFs [1,2,5,6]
-c1 = cos(th1)
-s1 = sin(th1)
-k1 = E*Asec/L1
-T1 = [c1,s1,0,0; -s1,c1,0,0; 0,0,c1,s1; 0,0,-s1,c1]
-Kl1 = k1 * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
-Kg1 = transpose(T1) * Kl1 * T1
-
-% Elemento 2: nodo 2-3, DOFs [3,4,5,6]
-c2 = cos(th2)
-s2 = sin(th2)
-k2 = E*Asec/L2
-T2 = [c2,s2,0,0; -s2,c2,0,0; 0,0,c2,s2; 0,0,-s2,c2]
-Kl2 = k2 * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
-Kg2 = transpose(T2) * Kl2 * T2
-
-% Elemento 3: nodo 1-2, DOFs [1,2,3,4]
-k3 = E*Asec/L3
-Kg3 = k3 * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0]
-
-% Ensamblaje
-Kg = zeros(6,6)
-Kg = assemble(Kg, Kg1, [1,2,5,6])
-Kg = assemble(Kg, Kg2, [3,4,5,6])
-Kg = assemble(Kg, Kg3, [1,2,3,4])
+% Ensamblaje con for
+nDof = 6;
+Kg = zeros(nDof, nDof);
+nElem = 3;
+for e = range(1, nElem, 1)
+  n1 = els(e, 1);
+  n2 = els(e, 2);
+  dx = nds(n2, 1) - nds(n1, 1);
+  dy = nds(n2, 3) - nds(n1, 3);
+  Le = sqrt(dx^2 + dy^2);
+  c = dx / Le;
+  s = dy / Le;
+  ke = E * Asec / Le;
+  Kl = ke * [1,0,-1,0; 0,0,0,0; -1,0,1,0; 0,0,0,0];
+  T = [c,s,0,0; -s,c,0,0; 0,0,c,s; 0,0,-s,c];
+  Ke = transpose(T) * Kl * T;
+  d = [dofs(e,1), dofs(e,2), dofs(e,3), dofs(e,4)];
+  Kg = assemble(Kg, Ke, d);
+end
+Kg
 
 % Carga Fy = -100 kN en nodo 3
 Fv = [0; 0; 0; 0; 0; -100]
 
-% BC: nodos 1,2 fijos
+% BC: nodos 1,2 fijos → libres DOFs 5,6
 free = [5, 6]
 Kr = submat(Kg, free)
 Fr = subvec(Fv, free)
@@ -508,24 +499,32 @@ els = [1,3; 2,4; 3,5; 4,5; 6,8; 7,9; 8,10; 9,10; 3,8; 4,9; 5,10]
 
 show3d(nds, els, "Nave Industrial 3D", [1,2,6,7])` },
 
-  { name: 'FEM — Placa CST', category: 'FEM', code: `% Placa CST - Plane stress
-E = 30e6
-nu = 0.25
-t = 1
+  { name: 'FEM — Placa CST', category: 'FEM', code: `% Placa CST - Plane stress con ensamblaje automatico
+E = 30e6;
+nu = 0.25;
+t = 1;
 
-% Nodos y elementos
+% Nodos [x,y,z] y conectividad [n1,n2,n3]
 nds = [0,0,0; 2,0,0; 2,1,0; 0,1,0]
 els = [1,2,3; 1,3,4]
 show3d(nds, els, "Placa CST (2 triangulos)", [1,4])
 
-% K elementos
-K1 = k_cst(E, nu, t, 0,0, 2,0, 2,1)
-K2 = k_cst(E, nu, t, 0,0, 2,1, 0,1)
+% DOFs: 2 DOF/nodo (ux,uy)
+dofs = [1,2,3,4,5,6; 1,2,5,6,7,8]
 
-% Ensamblar (8 DOFs)
-Kg = zeros(8,8)
-Kg = assemble(Kg, K1, [1,2,3,4,5,6])
-Kg = assemble(Kg, K2, [1,2,5,6,7,8])
+% Ensamblar con for
+nDof = 8;
+Kg = zeros(nDof, nDof);
+nElem = 2;
+for e = range(1, nElem, 1)
+  n1 = els(e,1);
+  n2 = els(e,2);
+  n3 = els(e,3);
+  Ke = k_cst(E, nu, t, nds(n1,1),nds(n1,2), nds(n2,1),nds(n2,2), nds(n3,1),nds(n3,2));
+  d = [dofs(e,1), dofs(e,2), dofs(e,3), dofs(e,4), dofs(e,5), dofs(e,6)];
+  Kg = assemble(Kg, Ke, d);
+end
+Kg
 
 % Carga: traccion borde derecho
 Fv = [0; 0; 500; 0; 500; 0; 0; 0]
@@ -541,22 +540,31 @@ Uf = fullvec(Ur, free, 8)
 show_deformed(nds, els, Uf, 5e4, 2, "Deformada CST (50000x)")` },
 
   { name: 'Control de flujo', category: 'Basico', code: `% For, while, if-else
+% (Dentro de loops, output es silencioso como MATLAB)
+% (Usar disp() para mostrar valores dentro de loops)
+
 % Sumatoria con for
-suma = 0
+suma = 0;
 for i = range(1, 10, 1)
-  suma = suma + i
+  suma = suma + i;
 end
 suma
 
 % Factorial con while
-n = 7
-fact = 1
-k = 1
+n = 7;
+fact = 1;
+k = 1;
 while k <= n
-  fact = fact * k
-  k = k + 1
+  fact = fact * k;
+  k = k + 1;
 end
 fact
+
+% For con disp() — muestra dentro del loop
+for i = range(1, 5, 1)
+  cuad = i^2;
+  disp(cuad)
+end
 
 % if-elseif-else
 x = 42

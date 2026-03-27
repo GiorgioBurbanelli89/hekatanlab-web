@@ -75,6 +75,11 @@ export function renderOutput(container: HTMLElement, results: EvalResult[], edit
         break;
       }
 
+      case 'disp':
+        div.className = 'out-line out-disp';
+        div.innerHTML = `<span class="out-result">${toMatlabStr(r.value)}</span>`;
+        break;
+
       case 'error':
         div.className = 'out-line out-error';
         div.textContent = `Error: ${r.error}`;

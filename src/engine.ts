@@ -14,11 +14,16 @@ import 'nerdamer/Solve.js';
 export interface EvalResult {
   line: number;
   input: string;
-  type: 'comment' | 'blank' | 'assign' | 'expr' | 'error' | 'separator' | 'heading' | 'funcdef' | 'plot';
+  type: 'comment' | 'blank' | 'assign' | 'expr' | 'error' | 'separator' | 'heading' | 'funcdef' | 'plot' | 'disp';
   varName?: string;
   value?: any;
   formatted?: string;
   error?: string;
+}
+
+// Marker class for disp() — always shows output even inside loops
+export class DispCommand {
+  constructor(public value: any) {}
 }
 
 // ── Function Library (localStorage) ──
@@ -428,6 +433,8 @@ export function createEngine() {
     loadNerdamer(parser);
     loadPlotFunctions(parser);
     loadFemFunctions(parser);
+    // disp() — always shows output even inside loops (MATLAB behavior)
+    parser.set('disp', (...args: any[]) => new DispCommand(args.length === 1 ? args[0] : args));
 
     // _idx: MATLAB-style 1-based indexing that works for vectors and matrices
     parser.set('_idx', (...args: any[]) => {
@@ -636,12 +643,14 @@ export function createEngine() {
       'and','or','not','xor',
       'map','filter','forEach','partitionSelect',
       'lup','lusolve','lsolve','usolve','qr','slu',
+      'disp','fprintf','sprintf',
       'for','while','if','else','elseif','end','break','continue','return',
     ]);
 
     // 7. Execute AST
     const results: EvalResult[] = [];
     const MAX_ITER = 10000; // safety limit
+    let insideLoop = 0; // depth counter: >0 means inside for/while → suppress output (MATLAB behavior)
 
     function prepExpr(raw: string): { expr: string; suppress: boolean } {
       let expr = raw.trim();
@@ -669,8 +678,17 @@ export function createEngine() {
     }
 
     function evalOneLine(rawText: string, startLine: number, suppress: boolean, expr: string) {
+      // Inside for/while loops: suppress ALL output (MATLAB behavior)
+      // Only disp() or plot commands produce output inside loops
+      const loopSuppress = insideLoop > 0;
+
       try {
         const result = parser.evaluate(expr);
+        // disp() always produces output, even inside loops
+        if (result instanceof DispCommand) {
+          results.push({ line: startLine + 1, input: rawText, type: 'disp', value: result.value, formatted: formatValue(result.value) });
+          return;
+        }
         if (result instanceof PlotCommand) {
           results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
           return;
@@ -686,21 +704,23 @@ export function createEngine() {
             results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result.data });
           } else if (result instanceof ViewCommand) {
             results.push({ line: startLine + 1, input: rawText, type: 'plot', value: result });
-          } else {
+          } else if (!loopSuppress) {
             results.push({
               line: startLine + 1, input: rawText, type: 'assign',
               varName: assignMatch[1], value: result,
               formatted: suppress ? undefined : formatValue(result),
             });
           }
-        } else {
+        } else if (!loopSuppress) {
           results.push({
             line: startLine + 1, input: rawText, type: 'expr',
             value: result, formatted: suppress ? undefined : formatValue(result),
           });
         }
       } catch (e: any) {
-        results.push({ line: startLine + 1, input: rawText, type: 'error', error: e.message });
+        if (!loopSuppress) {
+          results.push({ line: startLine + 1, input: rawText, type: 'error', error: e.message });
+        }
       }
     }
 
@@ -708,12 +728,14 @@ export function createEngine() {
       for (const stmt of stmts) {
         if (stmt.kind === 'line') {
           const trimmed = stmt.text.trim();
-          if (trimmed === '') { results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'blank' }); continue; }
+          if (trimmed === '') { if (!insideLoop) results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'blank' }); continue; }
           if (trimmed.startsWith('%')) {
-            if (trimmed.startsWith('% ═') || trimmed.startsWith('% ───') || trimmed.startsWith('% ---')) {
-              results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'separator' });
-            } else {
-              results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'comment', formatted: trimmed.substring(1).trim() });
+            if (!insideLoop) {
+              if (trimmed.startsWith('% ═') || trimmed.startsWith('% ───') || trimmed.startsWith('% ---')) {
+                results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'separator' });
+              } else {
+                results.push({ line: stmt.startLine + 1, input: stmt.text, type: 'comment', formatted: trimmed.substring(1).trim() });
+              }
             }
             continue;
           }
@@ -725,7 +747,10 @@ export function createEngine() {
 
         } else if (stmt.kind === 'for') {
           // for i = start:end or for i = start:step:end or for i = [array]
-          results.push({ line: stmt.startLine + 1, input: `for ${stmt.varName} = ${stmt.range}`, type: 'comment', formatted: `for ${stmt.varName}` });
+          // Only show the for header as a comment (no iteration output — MATLAB behavior)
+          if (!insideLoop) {
+            results.push({ line: stmt.startLine + 1, input: `for ${stmt.varName} = ${stmt.range}`, type: 'comment', formatted: `for ${stmt.varName}` });
+          }
           try {
             const { expr: rangeExpr } = prepExpr(stmt.range);
             const rangeVal = parser.evaluate(rangeExpr);
@@ -740,20 +765,26 @@ export function createEngine() {
               values = [Number(rangeVal)];
             }
             let iter = 0;
+            insideLoop++;
             for (const v of values) {
               if (++iter > MAX_ITER) { results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: 'Max iterations exceeded' }); break; }
               parser.set(stmt.varName, v);
               knownVars.add(stmt.varName);
               execStmts(stmt.body);
             }
+            insideLoop--;
           } catch (e: any) {
+            insideLoop = Math.max(0, insideLoop - 1);
             results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: `for: ${e.message}` });
           }
 
         } else if (stmt.kind === 'while') {
-          results.push({ line: stmt.startLine + 1, input: `while ${stmt.cond}`, type: 'comment', formatted: `while ...` });
+          if (!insideLoop) {
+            results.push({ line: stmt.startLine + 1, input: `while ${stmt.cond}`, type: 'comment', formatted: `while ...` });
+          }
           let iter = 0;
           try {
+            insideLoop++;
             while (true) {
               if (++iter > MAX_ITER) { results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: 'Max iterations exceeded' }); break; }
               const { expr: condExpr } = prepExpr(stmt.cond);
@@ -761,7 +792,9 @@ export function createEngine() {
               if (!condVal) break;
               execStmts(stmt.body);
             }
+            insideLoop--;
           } catch (e: any) {
+            insideLoop = Math.max(0, insideLoop - 1);
             results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: `while: ${e.message}` });
           }
 
