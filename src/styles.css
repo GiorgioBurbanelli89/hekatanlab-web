@@ -86,15 +86,23 @@ body {
 /* ── Main layout ── */
 #main {
   display: flex;
-  height: calc(100vh - 36px);
+  height: calc(100vh - 56px);
 }
 
-/* ── Editor ── */
-#editor-panel {
+/* ── Left column (editor + functions panel) ── */
+#left-col {
   width: 50%;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
+}
+
+/* ── Editor ── */
+#editor-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100px;
 }
 
 #editor-header {
@@ -125,6 +133,115 @@ body {
 
 #editor::placeholder {
   color: var(--comment);
+}
+
+/* ── Functions Panel (below editor) ── */
+#funcs-panel {
+  flex-direction: column;
+  border-top: 2px solid var(--accent);
+  height: 45%;
+  min-height: 120px;
+}
+
+#funcs-header {
+  height: 28px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: bold;
+  gap: 6px;
+}
+
+#funcs-header .spacer { flex: 1; }
+
+#funcs-header button {
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 8px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: inherit;
+}
+#funcs-header button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#funcs-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+#funcs-list {
+  width: 220px;
+  min-width: 180px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 4px 0;
+}
+
+.fn-cat {
+  color: var(--text-dim);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 6px 10px 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.fn-item {
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+.fn-item:hover { background: rgba(0,204,255,0.08); }
+.fn-item.fn-selected { background: rgba(0,204,255,0.15); border-left: 3px solid var(--accent); }
+
+.fn-name { color: var(--accent2); font-weight: bold; }
+.fn-params { color: var(--text-dim); font-size: 10px; }
+
+.fn-del {
+  position: absolute;
+  right: 6px;
+  background: var(--error);
+  color: #fff;
+  border: none;
+  border-radius: 2px;
+  padding: 0 4px;
+  cursor: pointer;
+  font-size: 9px;
+  display: none;
+}
+.fn-user:hover .fn-del { display: inline; }
+
+#funcs-code {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-editor);
+  padding: 0;
+}
+
+#funcs-code-pre {
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px;
+  margin: 0;
+  white-space: pre-wrap;
+  min-height: 100%;
 }
 
 /* ── Output ── */

@@ -28,18 +28,34 @@ document.body.innerHTML = `
   </select>
   <button id="btn-import" title="Importar S2K/E2K">📁 Import</button>
   <button id="btn-export" title="Exportar S2K/E2K">💾 Export</button>
-  <button id="btn-funcs">📚</button>
+  <button id="btn-funcs" title="Ver funciones FEM">📚 Funciones</button>
   <button id="btn-autorun" class="active" title="Autorun ON/OFF">⚡</button>
   <button id="btn-theme" title="Claro/Oscuro">☀</button>
   <button id="btn-help">?</button>
 </div>
 <div id="main">
-  <div id="editor-panel">
-    <div id="editor-header">EDITOR — MATLAB/Octave (autorun)</div>
-    <textarea id="editor" spellcheck="false" placeholder="% Escribe código MATLAB aquí
+  <div id="left-col">
+    <div id="editor-panel">
+      <div id="editor-header">EDITOR — MATLAB/Octave (autorun)</div>
+      <textarea id="editor" spellcheck="false" placeholder="% Escribe código MATLAB aquí
 a = 3
 A = [1, 2; 3, 4]
 x = inv(A) * [5; 6]"></textarea>
+    </div>
+    <div id="funcs-panel" style="display:none">
+      <div id="funcs-header">
+        <span>📚 FUNCIONES FEM</span>
+        <div class="spacer"></div>
+        <button id="funcs-save" title="Guardar funciones del editor">💾</button>
+        <button id="funcs-close" title="Cerrar panel">✕</button>
+      </div>
+      <div id="funcs-body">
+        <div id="funcs-list"></div>
+        <div id="funcs-code">
+          <pre id="funcs-code-pre">% Selecciona una función de la lista</pre>
+        </div>
+      </div>
+    </div>
   </div>
   <div id="output-panel">
     <div id="output-header">OUTPUT</div>
@@ -103,7 +119,6 @@ document.getElementById('template-select')!.addEventListener('change', (e) => {
   const sel = e.target as HTMLSelectElement;
   const t = TEMPLATES.find(x => x.name === sel.value);
   if (t) { editor.value = t.code; run(); }
-  // Keep showing selected template name (don't reset to "Ejemplos")
 });
 
 // Theme
@@ -114,61 +129,112 @@ document.getElementById('btn-theme')!.addEventListener('click', () => {
   (document.getElementById('btn-theme')!).textContent = dark ? '☀' : '🌙';
 });
 
-// Functions panel — shows BOTH built-in FEM functions AND user-saved functions
-document.getElementById('btn-funcs')!.addEventListener('click', () => {
-  document.getElementById('funcs-panel')?.remove();
-  const fns = loadFunctions();
-  const p = document.createElement('div');
-  p.id = 'funcs-panel';
-  p.style.cssText = 'position:fixed;top:5%;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:2px solid var(--accent);border-radius:12px;padding:20px;z-index:10000;color:var(--text);font-family:monospace;font-size:12px;min-width:500px;max-width:700px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
+// ── Functions Panel (inline below editor) ──
+let funcsPanelOpen = false;
+const funcsPanel = document.getElementById('funcs-panel')!;
+const funcsList = document.getElementById('funcs-list')!;
+const funcsCodePre = document.getElementById('funcs-code-pre')!;
 
-  // Built-in FEM functions
-  let h = '<h3 style="color:var(--accent);margin:0 0 8px">📚 Funciones FEM Predefinidas</h3>';
-  h += '<p style="color:var(--text-dim);font-size:10px;margin:0 0 8px">Click en una función para ver/copiar el código MATLAB</p>';
-
+function buildFuncsList() {
+  let html = '';
+  // Category groups
+  const cats: Record<string, typeof femMatlabLibrary> = {};
   for (const mf of femMatlabLibrary) {
-    const desc = mf.description ? `<span style="color:var(--text-dim);font-size:9px;margin-left:8px">${mf.description}</span>` : '';
-    const bodyEscaped = mf.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    h += `<details style="border:1px solid var(--border);border-radius:4px;margin:3px 0;padding:4px 8px">
-      <summary style="cursor:pointer;color:var(--accent2);font-weight:bold;font-size:11px">${mf.name}(${mf.params.join(', ')})${desc}</summary>
-      <pre style="color:var(--text);font-size:10px;margin:4px 0;padding:6px;background:var(--bg);border-radius:4px;white-space:pre-wrap;max-height:200px;overflow-y:auto">function ${mf.name}(${mf.params.join(', ')})\n${bodyEscaped}\nend</pre>
-      <button class="fn-copy" data-code="function ${mf.name}(${mf.params.join(', ')})\n${bodyEscaped}\nend" style="font-size:9px;padding:2px 8px;background:var(--bg);color:var(--accent);border:1px solid var(--accent);border-radius:3px;cursor:pointer;margin:2px 0">📋 Copiar al editor</button>
-    </details>`;
+    const cat = mf.name.startsWith('k_') ? 'Rigidez' :
+                mf.name.startsWith('T') && mf.name.length <= 4 ? 'Transformación' :
+                mf.name.startsWith('shell_') || mf.name.startsWith('build') ? 'Shell' :
+                mf.name.startsWith('mesh') || mf.name.startsWith('gen_') || mf.name.startsWith('fixed_') ? 'Malla' :
+                ['freedofs','submat','subvec','fullvec','assemble_k','solve_fem','reactions','frame_forces'].includes(mf.name) ? 'Solver' :
+                'Otros';
+    if (!cats[cat]) cats[cat] = [];
+    cats[cat].push(mf);
   }
 
-  // User saved functions
-  h += '<h3 style="color:var(--accent);margin:16px 0 8px;border-top:1px solid var(--border);padding-top:12px">🔧 Funciones del Usuario</h3>';
-  if (!fns.length) h += '<p style="color:var(--text-dim);font-size:10px">Ninguna guardada. Define con <code>function ... end</code> y usa 💾</p>';
-  for (const f of fns) {
-    h += `<div style="border:1px solid var(--border);border-radius:4px;padding:6px;margin:4px 0">
-      <b style="color:var(--accent2)">${f.name}(${f.params.join(',')})</b>
-      <button data-d="${f.name}" style="float:right;background:var(--error);color:#fff;border:none;border-radius:3px;padding:1px 6px;cursor:pointer;font-size:9px">🗑</button>
-      <pre style="color:var(--text-dim);font-size:9px;margin:2px 0 0;max-height:60px;overflow:hidden">${f.body}</pre>
-    </div>`;
+  // User functions
+  const userFns = loadFunctions();
+
+  for (const [cat, fns] of Object.entries(cats)) {
+    html += `<div class="fn-cat">${cat}</div>`;
+    for (const mf of fns) {
+      const desc = mf.description || '';
+      html += `<div class="fn-item" data-fn="${mf.name}" title="${desc}">
+        <span class="fn-name">${mf.name}</span><span class="fn-params">(${mf.params.join(', ')})</span>
+      </div>`;
+    }
   }
 
-  h += '<div style="display:flex;gap:6px;margin-top:10px"><button id="fn-s" style="flex:1;padding:5px;background:#0a4a2a;color:var(--accent2);border:1px solid var(--accent2);border-radius:4px;cursor:pointer">💾 Guardar del editor</button><button id="fn-c" style="padding:5px 10px;background:var(--bg);color:var(--text-dim);border:1px solid var(--border);border-radius:4px;cursor:pointer">✕ Cerrar</button></div>';
-  p.innerHTML = h;
-  document.body.appendChild(p);
+  if (userFns.length > 0) {
+    html += `<div class="fn-cat">Usuario</div>`;
+    for (const f of userFns) {
+      html += `<div class="fn-item fn-user" data-fn="user:${f.name}">
+        <span class="fn-name">${f.name}</span><span class="fn-params">(${f.params.join(', ')})</span>
+        <button class="fn-del" data-d="${f.name}" title="Eliminar">✕</button>
+      </div>`;
+    }
+  }
 
-  // Copy to editor buttons
-  p.querySelectorAll<HTMLButtonElement>('.fn-copy').forEach(b => b.addEventListener('click', () => {
-    const code = b.dataset.code || '';
-    editor.value = code.replace(/\\n/g, '\n') + '\n\n' + editor.value;
-    editor.scrollTop = 0;
-  }));
+  funcsList.innerHTML = html;
 
-  // Delete user functions
-  p.querySelectorAll<HTMLButtonElement>('button[data-d]').forEach(b => b.addEventListener('click', () => { removeFunction(b.dataset.d!); p.remove(); document.getElementById('btn-funcs')!.click(); }));
+  // Click handlers
+  funcsList.querySelectorAll<HTMLDivElement>('.fn-item').forEach(el => {
+    el.addEventListener('click', () => {
+      // Deselect all, select this one
+      funcsList.querySelectorAll('.fn-item').forEach(x => x.classList.remove('fn-selected'));
+      el.classList.add('fn-selected');
 
-  document.getElementById('fn-s')!.addEventListener('click', () => {
-    const rx = /function\s+(?:\[?(\w+)\]?\s*=\s*)?(\w+)\s*\(([^)]*)\)([\s\S]*?)(?:end|endfunction)/g;
-    let m, c = 0;
-    while ((m = rx.exec(editor.value)) !== null) { addFunction({ name: m[2], params: m[3].split(',').map(s=>s.trim()).filter(Boolean), body: m[4].trim() }); c++; }
-    alert(c ? `${c} función(es) guardada(s)` : 'No se encontraron funciones');
-    p.remove();
+      const fnName = el.dataset.fn || '';
+      if (fnName.startsWith('user:')) {
+        const name = fnName.slice(5);
+        const uf = loadFunctions().find(f => f.name === name);
+        if (uf) {
+          funcsCodePre.textContent = `function ${uf.name}(${uf.params.join(', ')})\n${uf.body}\nend`;
+        }
+      } else {
+        const mf = femMatlabLibrary.find(f => f.name === fnName);
+        if (mf) {
+          const header = mf.description ? `% ${mf.description}\n` : '';
+          funcsCodePre.textContent = `function ${mf.name}(${mf.params.join(', ')})\n${header}${mf.body}\nend`;
+        }
+      }
+    });
   });
-  document.getElementById('fn-c')!.addEventListener('click', () => p.remove());
+
+  // Delete user function buttons
+  funcsList.querySelectorAll<HTMLButtonElement>('.fn-del').forEach(b => {
+    b.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      removeFunction(b.dataset.d!);
+      buildFuncsList();
+    });
+  });
+}
+
+document.getElementById('btn-funcs')!.addEventListener('click', () => {
+  funcsPanelOpen = !funcsPanelOpen;
+  funcsPanel.style.display = funcsPanelOpen ? 'flex' : 'none';
+  document.getElementById('btn-funcs')!.classList.toggle('active', funcsPanelOpen);
+  if (funcsPanelOpen) {
+    buildFuncsList();
+    // Select first function
+    const first = funcsList.querySelector<HTMLDivElement>('.fn-item');
+    if (first) first.click();
+  }
+});
+
+document.getElementById('funcs-close')!.addEventListener('click', () => {
+  funcsPanelOpen = false;
+  funcsPanel.style.display = 'none';
+  document.getElementById('btn-funcs')!.classList.remove('active');
+});
+
+document.getElementById('funcs-save')!.addEventListener('click', () => {
+  const rx = /function\s+(?:\[?(\w+)\]?\s*=\s*)?(\w+)\s*\(([^)]*)\)([\s\S]*?)(?:end|endfunction)/g;
+  let m, c = 0;
+  while ((m = rx.exec(editor.value)) !== null) {
+    addFunction({ name: m[2], params: m[3].split(',').map(s=>s.trim()).filter(Boolean), body: m[4].trim() });
+    c++;
+  }
+  if (c) { buildFuncsList(); } else { alert('No se encontraron funciones en el editor'); }
 });
 
 // ── Import S2K/E2K ──
@@ -183,16 +249,12 @@ document.getElementById('btn-import')!.addEventListener('click', () => {
     reader.onload = () => {
       const text = reader.result as string;
       const ext = file.name.toLowerCase();
-      let matlab = '';
       try {
         if (ext.endsWith('.e2k')) {
-          const parsed = parseE2k(text);
-          matlab = e2kToMatlab(parsed);
+          editor.value = e2kToMatlab(parseE2k(text));
         } else {
-          const parsed = parseS2k(text);
-          matlab = s2kToMatlab(parsed);
+          editor.value = s2kToMatlab(parseS2k(text));
         }
-        editor.value = matlab;
         run();
       } catch (err: any) {
         alert(`Error importando ${file.name}: ${err.message}`);
@@ -211,19 +273,17 @@ document.getElementById('btn-export')!.addEventListener('click', () => {
   p.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-panel);border:2px solid var(--accent);border-radius:12px;padding:20px;z-index:10000;color:var(--text);font-family:monospace;font-size:13px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.6);';
   p.innerHTML = `
     <h3 style="color:var(--accent);margin:0 0 12px">💾 Exportar modelo</h3>
-    <p style="color:var(--text-dim);font-size:11px;margin:0 0 12px">Exporta las variables <b>nodes</b>, <b>frames/elem</b>, <b>supports</b>, <b>loads</b> del editor actual.</p>
+    <p style="color:var(--text-dim);font-size:11px;margin:0 0 12px">Exporta variables <b>nodes</b>, <b>frames/elem</b>, <b>supports</b>, <b>loads</b></p>
     <div style="display:flex;gap:8px;flex-direction:column">
-      <button id="exp-s2k" style="padding:8px;background:#1a3a5c;color:#66ccff;border:1px solid #66ccff;border-radius:4px;cursor:pointer;font-size:13px">📄 Exportar .s2k (SAP2000)</button>
-      <button id="exp-e2k" style="padding:8px;background:#1a4a2a;color:#66ff99;border:1px solid #66ff99;border-radius:4px;cursor:pointer;font-size:13px">📄 Exportar .e2k (ETABS)</button>
-      <button id="exp-close" style="padding:6px;background:var(--bg);color:var(--text-dim);border:1px solid var(--border);border-radius:4px;cursor:pointer">✕ Cerrar</button>
+      <button id="exp-s2k" style="padding:8px;background:#1a3a5c;color:#66ccff;border:1px solid #66ccff;border-radius:4px;cursor:pointer;font-size:13px">📄 .s2k (SAP2000)</button>
+      <button id="exp-e2k" style="padding:8px;background:#1a4a2a;color:#66ff99;border:1px solid #66ff99;border-radius:4px;cursor:pointer;font-size:13px">📄 .e2k (ETABS)</button>
+      <button id="exp-close" style="padding:6px;background:var(--bg);color:var(--text-dim);border:1px solid var(--border);border-radius:4px;cursor:pointer">✕</button>
     </div>`;
   document.body.appendChild(p);
 
-  const extractData = (): { nodes: number[][]; elements: number[][]; frameProps: number[][]; supports: number[][]; loads: number[][] } | null => {
-    // Run engine to get current scope
+  const extractData = () => {
     engine.evaluate(editor.value);
     const scope = engine.getScope();
-    // Try to extract arrays from scope
     const toArr = (v: any): number[][] => {
       if (!v) return [];
       try {
@@ -233,12 +293,10 @@ document.getElementById('btn-export')!.addEventListener('click', () => {
       } catch { return []; }
     };
     const nodes = toArr(scope.nodes);
-    if (nodes.length === 0) { alert('No se encontró variable "nodes" en el editor'); return null; }
-    const frames = toArr(scope.frames || scope.elem || scope.elements);
-    const props = toArr(scope.frame_props || scope.props);
-    const sups = toArr(scope.supports);
-    const lds = toArr(scope.loads);
-    return { nodes, elements: frames, frameProps: props, supports: sups, loads: lds };
+    if (!nodes.length) { alert('No se encontró variable "nodes"'); return null; }
+    return { nodes, elements: toArr(scope.frames || scope.elem || scope.elements),
+      frameProps: toArr(scope.frame_props || scope.props),
+      supports: toArr(scope.supports), loads: toArr(scope.loads) };
   };
 
   const download = (content: string, filename: string) => {
@@ -251,41 +309,15 @@ document.getElementById('btn-export')!.addEventListener('click', () => {
   };
 
   document.getElementById('exp-s2k')!.addEventListener('click', () => {
-    const data = extractData();
-    if (!data) return;
-    try {
-      const s2kData: S2kExportData = {
-        nodes: data.nodes,
-        frames: data.elements,
-        frameProps: data.frameProps.length > 0 ? data.frameProps : undefined,
-        supports: data.supports.length > 0 ? data.supports : undefined,
-        loads: data.loads.length > 0 ? data.loads : undefined,
-        title: 'HékatanLab Model',
-      };
-      const text = exportS2k(s2kData);
-      download(text, 'model.s2k');
-      p.remove();
-    } catch (err: any) { alert(`Error exportando: ${err.message}`); }
+    const d = extractData(); if (!d) return;
+    try { download(exportS2k({ nodes: d.nodes, frames: d.elements, frameProps: d.frameProps.length ? d.frameProps : undefined, supports: d.supports.length ? d.supports : undefined, loads: d.loads.length ? d.loads : undefined }), 'model.s2k'); p.remove(); }
+    catch (e: any) { alert('Error: ' + e.message); }
   });
-
   document.getElementById('exp-e2k')!.addEventListener('click', () => {
-    const data = extractData();
-    if (!data) return;
-    try {
-      const e2kData: E2kExportData = {
-        nodes: data.nodes,
-        elements: data.elements,
-        props: data.frameProps.length > 0 ? data.frameProps : undefined,
-        supports: data.supports.length > 0 ? data.supports : undefined,
-        loads: data.loads.length > 0 ? data.loads : undefined,
-        title: 'HékatanLab Model',
-      };
-      const text = exportE2k(e2kData);
-      download(text, 'model.e2k');
-      p.remove();
-    } catch (err: any) { alert(`Error exportando: ${err.message}`); }
+    const d = extractData(); if (!d) return;
+    try { download(exportE2k({ nodes: d.nodes, elements: d.elements, props: d.frameProps.length ? d.frameProps : undefined, supports: d.supports.length ? d.supports : undefined, loads: d.loads.length ? d.loads : undefined }), 'model.e2k'); p.remove(); }
+    catch (e: any) { alert('Error: ' + e.message); }
   });
-
   document.getElementById('exp-close')!.addEventListener('click', () => p.remove());
 });
 
@@ -308,13 +340,11 @@ document.getElementById('btn-help')!.addEventListener('click', () => {
 %   function K = nombre(E, A, L)
 %     K = (E*A/L) * [1, -1; -1, 1]
 %   end
-%   K1 = nombre(210000, 0.01, 2)
-%   📚 → 💾 Guardar para usar siempre
+%   📚 → ver código de funciones FEM
 %
-% SIMBÓLICO:
-%   sdiff('x^3', 'x')  sint('x^2', 'x')
-%   sdefint('x^2','x',0,1)  ssolve('x^2-4','x')
-%   sexpand('(x+1)^2')  sfactor('x^2-4')`;
+% S2K/E2K:
+%   📁 Import → abre .s2k o .e2k
+%   💾 Export → genera .s2k o .e2k`;
   run();
 });
 
