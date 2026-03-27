@@ -610,4 +610,71 @@ Uf = fullvec(Ur, free, nDof)`
 R = Kg * Uf`
   },
 
+  // ═══════════════════════════════════════
+  // ANALYZE — Tensiones y fuerzas internas
+  // (port de awatif analyze.ts a MATLAB)
+  // ═══════════════════════════════════════
+
+  {
+    name: 'shell_stress',
+    params: ['E', 'nu', 't', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3', 'ue'],
+    description: 'Tensiones de membrana y momentos en shell triangular (analyze)',
+    body: `% Calcula tensiones de membrana (Nx,Ny,Nxy) y momentos (Mx,My,Mxy)
+% ue = vector 18x1 de desplazamientos del elemento
+% Retorna: stress = [Nx; Ny; Nxy; Mx; My; Mxy]
+
+% Coordenadas
+y23 = y2 - y3; y31 = y3 - y1; y12 = y1 - y2
+x32 = x3 - x2; x13 = x1 - x3; x21 = x2 - x1
+
+% Area del triangulo
+Area = 0.5 * (x21 * y31 - x31 * (-y12))
+x31 = x3 - x1
+
+% Matriz B de campo lineal (3x6) — linearFieldMatrix
+Bf = [y23,y31,y12,0,0,0; 0,0,0,x32,x13,x21; x32,x13,x21,y23,y31,y12]
+
+% Desplazamientos de membrana: u1,u2,u3,v1,v2,v3
+% y rotaciones theta: -thetay1,-thetay2,-thetay3,thetax1,thetax2,thetax3
+u1 = ue(1); u2 = ue(7); u3 = ue(13)
+v1 = ue(2); v2 = ue(8); v3 = ue(14)
+ty1 = ue(5); ty2 = ue(11); ty3 = ue(17)
+tx1 = ue(4); tx2 = ue(10); tx3 = ue(16)
+Ud = [u1,-ty1; u2,-ty2; u3,-ty3; v1,tx1; v2,tx2; v3,tx3]
+
+% Matriz constitutiva (plane stress)
+D = (E / (1 - nu^2)) * [1,nu,0; nu,1,0; 0,0,(1-nu)/2]
+
+% sigma_and_kappa = (1/(2*Area)) * D * Bf * Ud → 3x2
+% col1 = tensiones membrana, col2 = curvaturas
+SK = (1 / (2 * Area)) * D * Bf * Ud
+
+% Fuerzas de membrana: N = sigma * t
+Nx = SK(1,1) * t; Ny = SK(2,1) * t; Nxy = SK(3,1) * t
+
+% Momentos flectores: M = kappa * t^3/12
+Mx = SK(1,2) * (t^3 / 12)
+My = SK(2,2) * (t^3 / 12)
+Mxy = SK(3,2) * (t^3 / 12)
+
+stress = [Nx; Ny; Nxy; Mx; My; Mxy]`
+  },
+
+  {
+    name: 'analyze_frame',
+    params: ['Ke', 'T', 'ue'],
+    description: 'Fuerzas internas frame: N, Vy, Vz, Mx, My, Mz en ambos extremos',
+    body: `% Ke = rigidez local 12x12, T = transformacion 12x12, ue = desplaz. globales
+% Retorna: fLocal = vector 12x1 de fuerzas locales
+% [N1,Vy1,Vz1,Mx1,My1,Mz1, N2,Vy2,Vz2,Mx2,My2,Mz2]
+u_local = T * ue
+fLocal = Ke * u_local
+N = [fLocal(1), fLocal(7)]
+Vy = [fLocal(2), fLocal(8)]
+Vz = [fLocal(3), fLocal(9)]
+Mx = [fLocal(4), fLocal(10)]
+My = [fLocal(5), fLocal(11)]
+Mz = [fLocal(6), fLocal(12)]`
+  },
+
 ];
