@@ -355,21 +355,25 @@ k1 = 100
 k2 = 200
 k3 = 150
 
-% Matrices locales
+% Matrices locales (resorte: K = k*[1,-1;-1,1])
 K1 = [k1, -k1; -k1, k1]
 K2 = [k2, -k2; -k2, k2]
 K3 = [k3, -k3; -k3, k3]
 
 % Ensamblaje global (4 DOFs)
 K = zeros(4, 4)
-K(1:2, 1:2) = K(1:2, 1:2) + K1
-K(2:3, 2:3) = K(2:3, 2:3) + K2
-K(3:4, 3:4) = K(3:4, 3:4) + K3
+K = assemble(K, K1, [1, 2])
+K = assemble(K, K2, [2, 3])
+K = assemble(K, K3, [3, 4])
 
-% BCs: u1=0, u4=0 → reducir a DOFs 2,3
-KR = K(2:3, 2:3)
+% BCs: u1=0, u4=0 → DOFs libres = [2, 3]
+free = [2, 3]
+KR = submat(K, free)
 F = [50; 0]
-u = inv(KR) * F` },
+u = inv(KR) * F
+
+disp("Desplazamientos u2, u3:")
+disp(u)` },
 
   // ── Álgebra simbólica ──
   { name: 'Álgebra simbólica', category: 'Simbólico', code: `% ═══════════════════════════════════════════

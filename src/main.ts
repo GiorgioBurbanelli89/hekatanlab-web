@@ -349,7 +349,7 @@ document.getElementById('btn-help')!.addEventListener('click', () => {
 %
 % S2K/E2K:
 %   📁 Import → abre .s2k o .e2k
-%   💾 Export → genera .s2k o .e2k`;
+%   💾 Export → genera .s2k o .e2k`);
   run();
 });
 

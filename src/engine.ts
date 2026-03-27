@@ -339,6 +339,73 @@ export function createEngine() {
       return assemble(Kg, Ke, d.map(Number));
     });
 
+    // Solver utilities (builtin JS for reliability)
+    p.set('freedofs', (nDof: any, fixed: any) => {
+      const n = typeof nDof === 'number' ? nDof : Number(nDof);
+      let f = fixed;
+      if (f && typeof f.toArray === 'function') f = f.toArray();
+      if (Array.isArray(f) && Array.isArray(f[0])) f = f.flat();
+      const fixSet = new Set((f as number[]).map(x => Math.round(Number(x))));
+      const free: number[] = [];
+      for (let i = 1; i <= n; i++) { if (!fixSet.has(i)) free.push(i); }
+      return math.matrix([free]);
+    });
+
+    p.set('submat', (K: any, dofs: any) => {
+      const kg = K.toArray ? K.toArray() : K;
+      let d = dofs;
+      if (d && typeof d.toArray === 'function') d = d.toArray();
+      if (Array.isArray(d) && Array.isArray(d[0])) d = d.flat();
+      const dd = (d as number[]).map(x => Math.round(Number(x)) - 1);
+      const n = dd.length;
+      const sub: number[][] = [];
+      for (let i = 0; i < n; i++) {
+        const row: number[] = [];
+        for (let j = 0; j < n; j++) { row.push(kg[dd[i]][dd[j]]); }
+        sub.push(row);
+      }
+      return math.matrix(sub);
+    });
+
+    p.set('subvec', (F: any, dofs: any) => {
+      const fv = F.toArray ? F.toArray() : F;
+      let d = dofs;
+      if (d && typeof d.toArray === 'function') d = d.toArray();
+      if (Array.isArray(d) && Array.isArray(d[0])) d = d.flat();
+      const dd = (d as number[]).map(x => Math.round(Number(x)) - 1);
+      const sub: number[][] = [];
+      for (const idx of dd) {
+        const val = Array.isArray(fv[idx]) ? fv[idx][0] : fv[idx];
+        sub.push([Number(val) || 0]);
+      }
+      return math.matrix(sub);
+    });
+
+    p.set('fullvec', (Ur: any, free: any, nTotal: any) => {
+      const ur = Ur.toArray ? Ur.toArray() : Ur;
+      let f = free;
+      if (f && typeof f.toArray === 'function') f = f.toArray();
+      if (Array.isArray(f) && Array.isArray(f[0])) f = f.flat();
+      const ff = (f as number[]).map(x => Math.round(Number(x)) - 1);
+      const n = typeof nTotal === 'number' ? nTotal : Number(nTotal);
+      const full: number[][] = [];
+      for (let i = 0; i < n; i++) full.push([0]);
+      for (let i = 0; i < ff.length; i++) {
+        const val = Array.isArray(ur[i]) ? ur[i][0] : ur[i];
+        full[ff[i]][0] = Number(val) || 0;
+      }
+      return math.matrix(full);
+    });
+
+    p.set('solve_fem', (Kg: any, Fv: any, fixed: any) => {
+      const nDof = (Kg.toArray ? Kg.toArray() : Kg).length;
+      const free = p.get('freedofs')(nDof, fixed);
+      const Kr = p.get('submat')(Kg, free);
+      const Fr = p.get('subvec')(Fv, free);
+      const Ur = math.lusolve(Kr, Fr);
+      return p.get('fullvec')(Ur, free, nDof);
+    });
+
     // Visualization
     p.set('show3d', (...args: any[]) => {
       const nodes = toArray2DArg(args[0]);
@@ -887,6 +954,7 @@ export function createEngine() {
       'inv','det','transpose','trace','eigs','norm','cross','dot','diag','size','length',
       'zeros','ones','identity','eye','range','linspace','reshape','flatten','squeeze',
       'subset','index','concat','sort','resize','kron',
+      'freedofs','submat','subvec','fullvec','solve_fem','assemble','assemble_k',
       'sdiff','sdiff2','sint','sdefint','ssolve','sexpand','sfactor','ssimplify',
       'plot','scatter','bar','stem','hist','plot3','surf','fplot','meshz',
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',

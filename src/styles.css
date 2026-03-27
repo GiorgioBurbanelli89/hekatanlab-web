@@ -129,6 +129,7 @@ body {
   resize: none;
   tab-size: 2;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 #editor::placeholder {
@@ -242,6 +243,8 @@ body {
   margin: 0;
   white-space: pre-wrap;
   min-height: 100%;
+  -webkit-overflow-scrolling: touch;
+  user-select: text;
 }
 
 /* ── Output ── */
@@ -266,6 +269,7 @@ body {
   flex: 1;
   padding: 10px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   font-size: 12px;
   line-height: 1.8;
 }
