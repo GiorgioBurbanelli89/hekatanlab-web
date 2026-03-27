@@ -85,7 +85,7 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   }
 
   // ── Nodes (spheres — awatif-ui style) ──
-  addNodes(scene, nodes, 0x66bb6a, maxDim);
+  addNodes(scene, nodes, isLight() ? 0x2e7d32 : 0x66bb6a, maxDim);
 
   // ── Supports ──
   if (data.supports) addSupports(scene, nodes, data.supports, maxDim);
@@ -185,10 +185,11 @@ function addWireframe(scene: THREE.Scene, nodes: number[][], elements: number[][
 
 // Color-coded wireframe: columns (green), beams (blue), diagonals (orange)
 function addWireframeColored(scene: THREE.Scene, nodes: number[][], elements: number[][]) {
-  const COL_BEAM = 0x4488cc;
-  const COL_COLUMN = 0x88cc44;
-  const COL_DIAG = 0xcc8844;
-  const COL_SHELL = 0x4488cc;
+  const light = isLight();
+  const COL_BEAM = light ? 0x1565c0 : 0x4488cc;
+  const COL_COLUMN = light ? 0x2e7d32 : 0x88cc44;
+  const COL_DIAG = light ? 0xbf360c : 0xcc8844;
+  const COL_SHELL = light ? 0x1565c0 : 0x4488cc;
 
   for (const el of elements) {
     const pts: THREE.Vector3[] = [];
@@ -343,7 +344,7 @@ function addTextSprite(scene: THREE.Scene, text: string, position: THREE.Vector3
   const ctx = canvas.getContext('2d')!;
   canvas.width = 128; canvas.height = 32;
   ctx.font = 'bold 18px monospace';
-  ctx.fillStyle = isLight() ? '#222' : '#eee';
+  ctx.fillStyle = isLight() ? '#111' : '#eee';
   ctx.textAlign = 'center';
   ctx.fillText(text, 64, 22);
 
@@ -451,11 +452,12 @@ function addLegend(container: HTMLDivElement, values: number[]) {
 
   const labelMax = document.createElement('div');
   labelMax.textContent = vMax.toPrecision(3);
-  labelMax.style.cssText = 'position:absolute;top:28px;right:36px;color:rgba(255,255,255,0.7);font:10px monospace;pointer-events:none;';
+  const lc = isLight() ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)';
+  labelMax.style.cssText = `position:absolute;top:28px;right:36px;color:${lc};font:10px monospace;pointer-events:none;`;
 
   const labelMin = document.createElement('div');
   labelMin.textContent = vMin.toPrecision(3);
-  labelMin.style.cssText = 'position:absolute;bottom:calc(40% - 2px);right:36px;color:rgba(255,255,255,0.7);font:10px monospace;pointer-events:none;';
+  labelMin.style.cssText = `position:absolute;bottom:calc(40% - 2px);right:36px;color:${lc};font:10px monospace;pointer-events:none;`;
 
   container.appendChild(legend);
   container.appendChild(labelMax);
