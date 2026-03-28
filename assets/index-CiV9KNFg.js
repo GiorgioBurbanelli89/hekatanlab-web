@@ -9256,7 +9256,15 @@ for iy = range(0, ny, 1)
   supVec(iy+1) = iy*nNx + 1
 end
 show3d(nds, els, "Placa 3Q (CST) — geometria", supVec)
-show_deformed(nds, els, Uf, 0, 2, "Placa 3Q (CST) — deformada", supVec)`},{name:"Placa Q4",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 0, 2, "Placa 3Q (CST) — deformada", supVec)
+
+% ─── CONTORNO ───
+vals = zeros(nNodes, 1)
+for i = range(1, nNodes, 1)
+  ux = Uf((i-1)*2+1); uy = Uf((i-1)*2+2)
+  vals(i) = sqrt(ux^2 + uy^2)
+end
+show_deformed_contour(nds, els, Uf, vals, 0, 2, "Placa 3Q — contorno |u|")`},{name:"Placa Q4",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
 % Placa Q4 — Plane Stress, malla 4x4
 % Placa 1x1, traccion borde derecho
 % 2 DOF/nodo (ux, uy)
@@ -9331,7 +9339,15 @@ for iy = range(0, ny, 1)
   supVec(iy+1) = iy*nNx + 1
 end
 show3d(nds, els, "Placa Q4 — geometria", supVec)
-show_deformed(nds, els, Uf, 0, 2, "Placa Q4 — deformada", supVec)`},{name:"Losa Rect",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 0, 2, "Placa Q4 — deformada", supVec)
+
+% ─── CONTORNO ───
+vals = zeros(nNodes, 1)
+for i = range(1, nNodes, 1)
+  ux = Uf((i-1)*2+1); uy = Uf((i-1)*2+2)
+  vals(i) = sqrt(ux^2 + uy^2)
+end
+show_deformed_contour(nds, els, Uf, vals, 0, 2, "Placa Q4 — contorno |u|")`},{name:"Losa Rect",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
 % Losa rectangular — Mindlin-Reissner Q4
 % Simplemente apoyada, carga uniforme
 % 3 DOF/nodo: w, theta_x, theta_y
@@ -9425,7 +9441,14 @@ disp("Ratio FEM/Navier:"); disp(abs(w_center)/w_navier)
 % ─── 10. VISUALIZACION ───
 supVec = [1, nNx, ny*nNx+1, nNodes]
 show3d(nds, els, "Losa Rect — geometria", supVec)
-show_deformed(nds, els, Uf, 0, 3, "Losa Rect — deformada", supVec)`},{name:"Losa Plana",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 0, 3, "Losa Rect — deformada", supVec)
+
+% ─── CONTORNO ───
+vals = zeros(nNodes, 1)
+for i = range(1, nNodes, 1)
+  vals(i) = Uf((i-1)*3+1)
+end
+show_deformed_contour(nds, els, Uf, vals, 0, 3, "Losa Rect — contorno w")`},{name:"Losa Plana",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
 % Losa plana sobre columnas — Mindlin Q4
 % 2 vanos cada direccion, 9 columnas puntuales
 % 3 DOF/nodo: w, theta_x, theta_y
@@ -9505,7 +9528,14 @@ disp("Flecha centro vano [m]:"); disp(w_mid)
 
 % ─── 10. VISUALIZACION ───
 show3d(nds, els, "Losa Plana — geometria", supVec)
-show_deformed(nds, els, Uf, 0, 3, "Losa Plana — deformada", supVec)`},{name:"Viga Alta",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 0, 3, "Losa Plana — deformada", supVec)
+
+% ─── CONTORNO ───
+vals = zeros(nNodes, 1)
+for i = range(1, nNodes, 1)
+  vals(i) = Uf((i-1)*3+1)
+end
+show_deformed_contour(nds, els, Uf, vals, 0, 3, "Losa Plana — contorno w")`},{name:"Viga Alta",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
 % Viga alta (deep beam) — Plane Stress Q4
 % L=4m, h=2m, t=0.3m, simplemente apoyada
 % Carga puntual P=100 kN centro borde superior
@@ -9565,7 +9595,15 @@ disp("(Viga alta L/h=2: FEM da mayor deflexion que Euler)")
 
 % ─── 8. VISUALIZACION ───
 show3d(nds, els, "Viga Alta — geometria", [1, nNx])
-show_deformed(nds, els, Uf, 0, 2, "Viga Alta — deformada", [1, nNx])`},{name:"Muro Cont.",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 0, 2, "Viga Alta — deformada", [1, nNx])
+
+% ─── CONTORNO ───
+vals = zeros(nNodes, 1)
+for i = range(1, nNodes, 1)
+  ux = Uf((i-1)*2+1); uy = Uf((i-1)*2+2)
+  vals(i) = sqrt(ux^2 + uy^2)
+end
+show_deformed_contour(nds, els, Uf, vals, 0, 2, "Viga Alta — contorno |u|")`},{name:"Muro Cont.",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
 % Muro de contencion (pantalla) — Plane Stress Q4
 % Pantalla vertical: ancho=0.30m, H=5m
 % Empotrada en base, empuje triangular Ka*gamma*h
@@ -9741,7 +9779,15 @@ disp("Uy centro [m]:"); disp(Uf(2*midNode))
 
 % ─── 8. VISUALIZACION ───
 show3d(nds, els, "Placa Base — geometria", [n_bl, n_br, n_tl, n_tr])
-show_deformed(nds, els, Uf, 0, 2, "Placa Base — deformada", [n_bl, n_br, n_tl, n_tr])`},{name:"Col+Placa 3D",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
+show_deformed(nds, els, Uf, 0, 2, "Placa Base — deformada", [n_bl, n_br, n_tl, n_tr])
+
+% ─── CONTORNO ───
+vals = zeros(nNodes, 1)
+for i = range(1, nNodes, 1)
+  ux = Uf((i-1)*2+1); uy = Uf((i-1)*2+2)
+  vals(i) = sqrt(ux^2 + uy^2)
+end
+show_deformed_contour(nds, els, Uf, vals, 0, 2, "Placa Base — contorno |u|")`},{name:"Col+Placa 3D",category:"Hekatan Struct",code:`% ═══════════════════════════════════════════
 % Columna 3D sobre placa base — cantilever
 % Col W 200x200, h=4m, placa 400x400
 % ═══════════════════════════════════════════
