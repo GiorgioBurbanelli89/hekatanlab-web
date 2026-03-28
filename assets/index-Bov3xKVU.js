@@ -10082,7 +10082,270 @@ Uf = fem_deform(nds, els, sups, loads, E_mat, 0.3, 1, A_sec, Iz, Iy, G, J)
 dof_top = (topNode-1)*6+1
 disp("Ux tope [m]:"); disp(Uf(dof_top))
 
-show_deformed(nds, els, Uf, 0, 6, "Diagrid Tower — deformada", supVec)`}];function gn(i){return i&&parseFloat(i)||0}function kb(i){const e=new Map,t=/(\w+)\s*=\s*(?:"([^"]*?)"|(\S+))/g;let r;for(;(r=t.exec(i))!==null;)e.set(r[1],r[2]!==void 0?r[2]:r[3]);return e}function Yte(i){const e=i.split(/\r?\n/);return e.some(r=>r.trim().startsWith("TABLE:"))?Zte(e):jte(e)}function Zte(i){var x,y,N,w,T,M;const e=[];let t="";for(const E of i){const L=E.trimEnd();L.endsWith("_")?t+=L.slice(0,-1)+" ":(t+=L,e.push(t),t="")}t&&e.push(t);const r={force:"KN",length:"m"};let a="SAP2000 Model";const s=new Map,o=new Map,u=new Map,f=new Map,l=[],c=[],d=new Map,h=new Map,p=new Map,v=[];let m="";for(const E of e){const L=E.trim();if(!L||L.startsWith(";")||L.startsWith("File "))continue;if(L.startsWith("TABLE:")){const A=L.match(/TABLE:\s+"(.+?)"/);m=A?A[1].toUpperCase():"";continue}if(L==="END TABLE DATA"){m="";continue}const C=kb(L);switch(m){case"PROGRAM CONTROL":{const A=C.get("CurrUnits");if(A){const S=A.split(",").map(_=>_.trim());S[0]&&(r.force=S[0]),S[1]&&(r.length=S[1])}const b=C.get("ProgramName");b&&(a=`${b} Model`);break}case"MATERIAL PROPERTIES 01 - GENERAL":{const A=C.get("Material");A&&!s.has(A)&&s.set(A,{E:0,nu:0,G:0});break}case"MATERIAL PROPERTIES 02 - BASIC MECHANICAL PROPERTIES":{const A=C.get("Material");if(A){const b=s.get(A)||{E:0,nu:0,G:0};b.E=gn(C.get("E1")),b.G=gn(C.get("G12")),b.nu=gn(C.get("U12")),b.density=gn(C.get("UnitMass")),s.set(A,b)}break}case"FRAME SECTION PROPERTIES 01 - GENERAL":{const A=C.get("SectionName");A&&o.set(A,{material:C.get("Material")||"",shape:C.get("Shape")||"Rectangular",D:gn(C.get("t3")),B:gn(C.get("t2")),TF:gn(C.get("tf")),TW:gn(C.get("tw")),A:gn(C.get("Area")),Iz:gn(C.get("I33")),Iy:gn(C.get("I22")),J:gn(C.get("TorsConst"))});break}case"AREA SECTION PROPERTIES":{const A=C.get("Section");A&&u.set(A,{material:C.get("Material")||"",type:C.get("Type")||"Shell",thickness:gn(C.get("Thickness"))});break}case"JOINT COORDINATES":{const A=C.get("Joint");A&&f.set(A,[gn(C.get("XorR")),gn(C.get("Y")),gn(C.get("Z"))]);break}case"CONNECTIVITY - FRAME":{const A=C.get("Frame"),b=C.get("JointI"),S=C.get("JointJ");A&&b&&S&&l.push({name:A,j1:b,j2:S});break}case"CONNECTIVITY - AREA":{const A=C.get("Area");if(A){const b=parseInt(C.get("NumJoints")||"4"),S=[];for(let _=1;_<=b;_++){const D=C.get(`Joint${_}`);D&&S.push(D)}S.length>=3&&c.push({name:A,joints:S})}break}case"JOINT RESTRAINT ASSIGNMENTS":{const A=C.get("Joint");A&&d.set(A,[((x=C.get("U1"))==null?void 0:x.toLowerCase())==="yes",((y=C.get("U2"))==null?void 0:y.toLowerCase())==="yes",((N=C.get("U3"))==null?void 0:N.toLowerCase())==="yes",((w=C.get("R1"))==null?void 0:w.toLowerCase())==="yes",((T=C.get("R2"))==null?void 0:T.toLowerCase())==="yes",((M=C.get("R3"))==null?void 0:M.toLowerCase())==="yes"]);break}case"FRAME SECTION ASSIGNMENTS":{const A=C.get("Frame"),b=C.get("AnalSect");A&&b&&h.set(A,b);break}case"AREA SECTION ASSIGNMENTS":{const A=C.get("Area"),b=C.get("Section");A&&b&&p.set(A,b);break}case"JOINT LOADS - FORCE":{const A=C.get("Joint");A&&v.push({joint:A,fx:gn(C.get("F1")),fy:gn(C.get("F2")),fz:gn(C.get("F3")),mx:gn(C.get("M1")),my:gn(C.get("M2")),mz:gn(C.get("M3"))});break}}}return qb(r,a,s,o,u,f,l,c,d,h,p,v)}function jte(i){const e={force:"KN",length:"m"};let t="SAP2000 Model (legacy)";const r=new Map,a=new Map,s=new Map,o=new Map,u=[],f=[],l=new Map,c=[];let d="",h="";for(const p of i){const v=p.trim();if(!v||v.startsWith(";"))continue;if(!p.startsWith(" ")&&!p.startsWith("	")){const y=v.toUpperCase();if(y==="END")break;y.startsWith("SHELL SECTION")?d="SHELL SECTION":y.startsWith("FRAME SECTION")?d="FRAME SECTION":d=y.split(/\s+/)[0];continue}const m=kb(v),x=v.split(/\s+/);switch(d){case"SYSTEM":{const y=m.get("LENGTH");y&&(e.length=y);const N=m.get("FORCE");N&&(e.force=N);break}case"JOINT":{const y=x[0];o.set(y,[gn(m.get("X")),gn(m.get("Y")),gn(m.get("Z"))]);break}case"RESTRAINT":{const y=m.get("ADD"),N=m.get("DOF");if(y&&N){const w=N.split(","),T=[!1,!1,!1,!1,!1,!1];for(const M of w){const E=M.toUpperCase();(E==="UX"||E==="U1")&&(T[0]=!0),(E==="UY"||E==="U2")&&(T[1]=!0),(E==="UZ"||E==="U3")&&(T[2]=!0),(E==="RX"||E==="R1")&&(T[3]=!0),(E==="RY"||E==="R2")&&(T[4]=!0),(E==="RZ"||E==="R3")&&(T[5]=!0)}l.set(y,T)}break}case"MATERIAL":{const y=m.get("NAME");if(y)h=y,r.set(y,{E:0,nu:0,G:0});else if(h){const N=r.get(h),w=m.get("E");w&&(N.E=gn(w));const T=m.get("U");T&&(N.nu=gn(T)),N.G=N.E/(2*(1+N.nu))}break}case"SHELL":{const y=x[0],N=m.get("J");N&&f.push({name:y,joints:N.split(",")});break}case"SHELL SECTION":{const y=m.get("NAME");y&&s.set(y,{material:m.get("MAT")||"",type:m.get("TYPE")||"Shell",thickness:gn(m.get("TH"))});break}case"FRAME":{const y=x[0],N=m.get("J");if(N){const w=N.split(",");w.length>=2&&u.push({name:y,j1:w[0],j2:w[1]})}break}case"LOAD":{const y=m.get("ADD");y&&c.push({joint:y,fx:gn(m.get("UX")),fy:gn(m.get("UY")),fz:gn(m.get("UZ")),mx:gn(m.get("MX")),my:gn(m.get("MY")),mz:gn(m.get("MZ"))});break}}}return qb(e,t,r,a,s,o,u,f,l,new Map,new Map,c)}function qb(i,e,t,r,a,s,o,u,f,l,c,d){const h=[],p=new Map,v=[];for(const[M,E]of s)p.set(M,v.length),h.push(M),v.push([...E]);const m=[],x=[],y=[],N=new Map;for(const M of o){const E=p.get(M.j1),L=p.get(M.j2);if(E!==void 0&&L!==void 0){const C=m.length;m.push([E,L]),x.push(M.name),y.push("frame");const A=l.get(M.name);A&&N.set(C,A)}}for(const M of u){const E=M.joints.map(L=>p.get(L)).filter(L=>L!==void 0);if(E.length>=3){const L=m.length;m.push(E),x.push(M.name),y.push(E.length===3?"shell3":"shell4");const C=c.get(M.name);C&&N.set(L,C)}}const w=new Map;for(const[M,E]of f){const L=p.get(M);L!==void 0&&w.set(L,E)}const T=new Map;for(const M of d){const E=p.get(M.joint);if(E!==void 0){const L=T.get(E)||[0,0,0,0,0,0];L[0]+=M.fx,L[1]+=M.fy,L[2]+=M.fz,L[3]+=M.mx,L[4]+=M.my,L[5]+=M.mz,T.set(E,L)}}return{nodes:v,nodeNames:h,elements:m,elementNames:x,elementTypes:y,materials:t,frameSections:r,shellSections:a,elementSections:N,supports:w,loads:T,units:i,title:e}}function Jte(i){const e=[],{nodes:t,elements:r,elementTypes:a,materials:s,frameSections:o,shellSections:u,elementSections:f,supports:l,loads:c,units:d}=i;e.push("% ═══════════════════════════════════════════════════"),e.push("% Modelo importado de SAP2000 (.s2k)"),e.push(`% Unidades: ${d.force}, ${d.length}`),e.push(`% Nodos: ${t.length}, Elementos: ${r.length}`),e.push("% ═══════════════════════════════════════════════════"),e.push(""),e.push("% ── Nodos [x, y, z] ──");const h=t.map(m=>`  ${m[0]}, ${m[1]}, ${m[2]}`);e.push(`nodes = [${h.join(`;
+show_deformed(nds, els, Uf, 0, 6, "Diagrid Tower — deformada", supVec)`},{name:"Beam Impact — Respuesta Dinámica",category:"Dinámica",code:`% ═══════════════════════════════════════════
+% Respuesta dinámica de viga RC a impacto de bola de acero
+% Ref: Calcpad — Beam Impact Analysis Animated
+% Método: SDOF analítico + MDOF superposición modal (Prob 13.1 style)
+% ═══════════════════════════════════════════
+
+% ═══ PARTE 1: DATOS DEL PROBLEMA ═══
+
+% --- Bola de acero ---
+Ms = 2.1              % masa bola (t)
+Es = 206e6            % E acero (kPa)
+nus = 0.3             % Poisson acero
+rho_s = 7.85          % densidad acero (t/m3)
+Vs = Ms / rho_s       % volumen (m3)
+Rs = (3*Vs/(4*pi))^(1/3) * 1000  % radio (mm)
+disp("Radio bola [mm]:"); disp(Rs)
+
+% --- Altura de caída ---
+H = 2                 % altura sobre viga (m)
+
+% --- Viga simplemente apoyada ---
+L = 12                % longitud (m)
+Eb = 20e6             % E hormigón C20/25 (kPa)
+nu_b = 0.2            % Poisson
+Gb = Eb / (2*(1+nu_b))% G (kPa)
+
+% --- Sección rectangular ---
+b_sec = 0.350         % ancho (m)
+h_sec = 0.650         % alto (m)
+A_sec = b_sec * h_sec % area (m2)
+I_sec = b_sec * h_sec^3 / 12  % inercia (m4)
+Aq = 5/6 * A_sec      % area corte
+
+% --- Cargas ---
+gamma_b = 25          % peso unitario hormigón (kN/m3)
+gb = A_sec * gamma_b  % peso propio (kN/m)
+q = 10                % carga viva (kN/m)
+gg = 9.81             % gravedad (m/s2)
+m_lin = (gb + q) / gg % masa por metro (t/m)
+
+disp("Peso propio [kN/m]:"); disp(gb)
+disp("Masa lineal [t/m]:"); disp(m_lin)
+
+% ═══ PARTE 2: SOLUCIÓN SDOF ═══
+
+% Masa dinámica equivalente (factor 2*L/pi)
+Md = 2*L/pi * m_lin
+disp("Masa dinámica equiv [t]:"); disp(Md)
+
+% Energía potencial
+Ep = Ms * gg * H
+disp("Energía potencial [kJ]:"); disp(Ep)
+
+% Velocidad al impacto (conservación energía)
+v0 = sqrt(2*Ep/Ms)
+disp("Velocidad impacto [m/s]:"); disp(v0)
+
+% Colisión perfectamente inelástica
+Mtot = Ms + Md
+v1 = v0 * Ms / Mtot
+disp("Velocidad post-impacto [m/s]:"); disp(v1)
+
+% Rigidez a flexión (carga puntual centro)
+K_beam = 48*Eb*I_sec / L^3
+disp("Rigidez K [kN/m]:"); disp(K_beam)
+
+% Deflexión estática por carga uniforme
+z0 = 5*(gb+q)*L^4 / (384*Eb*I_sec) * 1000
+disp("Deflexión uniforme z0 [mm]:"); disp(z0)
+
+% Deflexión estática por peso total
+z_st = Mtot*gg / K_beam * 1000
+disp("Deflexión estática z_st [mm]:"); disp(z_st)
+
+% Frecuencia natural
+omega1 = sqrt(K_beam / Mtot)
+T1 = 2*pi / omega1
+f1 = 1 / T1
+disp("omega1 [rad/s]:"); disp(omega1)
+disp("Período T1 [s]:"); disp(T1)
+disp("Frecuencia f1 [Hz]:"); disp(f1)
+
+% Factor dinámico
+mu = 1 + sqrt(1 + (v1*omega1/gg)^2)
+disp("Factor dinámico mu:"); disp(mu)
+
+% Desplazamiento dinámico
+zd = mu * z_st
+disp("Desplazamiento dinámico [mm]:"); disp(zd)
+
+% Fuerza dinámica
+Fd = mu * Ms * gg
+disp("Fuerza dinámica [kN]:"); disp(Fd)
+
+% ═══ PARTE 3: RESPUESTA SDOF EN EL TIEMPO ═══
+
+xi = 0.05             % amortiguamiento
+omega_d = omega1 * sqrt(1 - xi^2)
+
+% Duración del impulso (Hertz contact)
+tau_L = 2.94 * sqrt((15/16*Ms*((1-nu_b^2)/Eb + (1-nus^2)/Es))^2 / (Rs/1000*v0))
+disp("Duración impulso tau_L [ms]:"); disp(tau_L*1000)
+
+% Fuerza de impulso (sinusoidal)
+F_max = Ms*v0*(1+0)*pi/(2*tau_L)
+disp("Fuerza máxima impulso [kN]:"); disp(F_max)
+
+% Amplitud de vibración libre
+Avib = v1/omega1 * 1000
+disp("Amplitud vibración A [mm]:"); disp(Avib)
+
+% Time history SDOF (Duhamel)
+nSteps = 500
+dt = 5 / nSteps     % 5 segundos total
+y_sdof = zeros(nSteps, 1)
+t_vec = zeros(nSteps, 1)
+
+for k = range(0, nSteps-1, 1)
+  t_k = k * dt
+  t_vec(k+1) = t_k * 1000   % en ms
+  % Vibración libre amortiguada después del impulso
+  y_sdof(k+1) = -(z_st + Avib * exp(-xi*omega1*t_k) * sin(omega_d*t_k))
+end
+
+plot2d(t_vec, y_sdof, "SDOF — Desplazamiento centro [mm] vs t [ms]")
+
+% ═══ PARTE 4: ANÁLISIS MDOF — Estilo Problem 13.1 ═══
+
+% Discretizar viga en nJ juntas interiores
+nJ = 11              % juntas intermedias (impar)
+nSeg = nJ + 1        % segmentos
+dx_seg = L / nSeg    % longitud segmento
+disp("Num segmentos:"); disp(nSeg)
+disp("dx [m]:"); disp(dx_seg)
+
+% --- Matriz de flexibilidad D(i,j) ---
+% D(i,j) = integral M1(x;i)*M1(x;j) / (E*I) dx
+%         + integral V1(x;i)*V1(x;j) / (G*Aq) dx
+
+D = zeros(nJ, nJ)
+for ii = range(1, nJ, 1)
+  xi_pos = dx_seg * ii
+  for jj = range(1, nJ, 1)
+    xj_pos = dx_seg * jj
+    % Integración numérica (Simpson)
+    nPts = 100
+    dxx = L / nPts
+    sumM = 0
+    sumV = 0
+    for pp = range(0, nPts, 1)
+      xx = pp * dxx
+      % Momento por carga unitaria en i
+      if xx < xi_pos
+        Mi = xx * (L - xi_pos) / L
+      else
+        Mi = xi_pos * (L - xx) / L
+      end
+      % Momento por carga unitaria en j
+      if xx < xj_pos
+        Mj = xx * (L - xj_pos) / L
+      else
+        Mj = xj_pos * (L - xx) / L
+      end
+      % Cortante por carga unitaria en i
+      if xx < xi_pos
+        Vi = 1 - xi_pos/L
+      else
+        Vi = -xi_pos/L
+      end
+      % Cortante por carga unitaria en j
+      if xx < xj_pos
+        Vj = 1 - xj_pos/L
+      else
+        Vj = -xj_pos/L
+      end
+      ww_trap = dxx
+      if pp == 0
+        ww_trap = dxx/2
+      end
+      if pp == nPts
+        ww_trap = dxx/2
+      end
+      sumM = sumM + Mi*Mj * ww_trap
+      sumV = sumV + Vi*Vj * ww_trap
+    end
+    D(ii,jj) = sumM/(Eb*I_sec) + sumV/(Gb*Aq)
+  end
+end
+
+disp("Matriz flexibilidad D (esquina 3x3):")
+disp([D(1,1), D(1,2), D(1,3); D(2,1), D(2,2), D(2,3); D(3,1), D(3,2), D(3,3)])
+
+% --- Rigidez K = inv(D) ---
+Kstiff = inv(D)
+
+% --- Masa lumped (diagonal) ---
+M_diag = zeros(nJ, nJ)
+for ii = range(1, nJ, 1)
+  dm = m_lin * dx_seg
+  if ii == (nJ+1)/2
+    dm = dm + Ms     % bola impacta en el centro
+  end
+  M_diag(ii,ii) = dm
+end
+Mtotal_mdof = 0
+for ii = range(1, nJ, 1)
+  Mtotal_mdof = Mtotal_mdof + M_diag(ii,ii)
+end
+disp("Masa total MDOF [t]:"); disp(Mtotal_mdof)
+
+% --- Eigenvalues: K*phi = omega^2 * M*phi ---
+% Msq = sqrt(M)
+Msq = zeros(nJ, nJ)
+for ii = range(1, nJ, 1)
+  Msq(ii,ii) = sqrt(M_diag(ii,ii))
+end
+Msq_inv = inv(Msq)
+
+% C = Msq_inv * K * Msq_inv  (eigenproblem estándar)
+C_mat = Msq_inv * Kstiff * Msq_inv
+
+% Eigenvalues y eigenvectors de C
+lambdas = eigenvalues(C_mat)
+disp("Eigenvalues (omega^2):")
+disp(lambdas)
+
+% Frecuencias naturales
+omega_vec = zeros(nJ, 1)
+for ii = range(1, nJ, 1)
+  omega_vec(ii) = sqrt(abs(lambdas(ii)))
+end
+disp("Frecuencias naturales [rad/s]:")
+disp(omega_vec)
+
+freq_vec = omega_vec / (2*pi)
+disp("Frecuencias [Hz]:")
+disp(freq_vec)
+
+T_vec = 1 ./ freq_vec
+disp("Períodos [s]:")
+disp(T_vec)
+
+% --- Amortiguamiento Rayleigh ---
+% alpha + beta*omega_i^2 = 2*xi*omega_i
+% beta = 2*xi / (omega1 + omega2)
+% alpha = beta * omega1 * omega2
+beta_R = 2*xi / (omega_vec(1) + omega_vec(2))
+alpha_R = beta_R * omega_vec(1) * omega_vec(2)
+disp("Rayleigh alpha:"); disp(alpha_R)
+disp("Rayleigh beta:"); disp(beta_R)
+
+% Factores de amortiguamiento modal
+xi_modal = zeros(nJ, 1)
+for ii = range(1, nJ, 1)
+  xi_modal(ii) = alpha_R/(2*omega_vec(ii)) + beta_R*omega_vec(ii)/2
+end
+disp("Amortiguamiento modal xi_i:")
+disp(xi_modal)
+
+disp("═══════════════════════════════════════════")
+disp("Beam Impact — Análisis completado")
+disp("Comparar SDOF vs MDOF: frecuencia fundamental")
+disp("SDOF omega1 [rad/s]:"); disp(omega1)
+disp("MDOF omega1 [rad/s]:"); disp(omega_vec(1))`}];function gn(i){return i&&parseFloat(i)||0}function kb(i){const e=new Map,t=/(\w+)\s*=\s*(?:"([^"]*?)"|(\S+))/g;let r;for(;(r=t.exec(i))!==null;)e.set(r[1],r[2]!==void 0?r[2]:r[3]);return e}function Yte(i){const e=i.split(/\r?\n/);return e.some(r=>r.trim().startsWith("TABLE:"))?Zte(e):jte(e)}function Zte(i){var x,y,N,w,T,M;const e=[];let t="";for(const E of i){const L=E.trimEnd();L.endsWith("_")?t+=L.slice(0,-1)+" ":(t+=L,e.push(t),t="")}t&&e.push(t);const r={force:"KN",length:"m"};let a="SAP2000 Model";const s=new Map,o=new Map,u=new Map,f=new Map,l=[],c=[],d=new Map,h=new Map,p=new Map,v=[];let m="";for(const E of e){const L=E.trim();if(!L||L.startsWith(";")||L.startsWith("File "))continue;if(L.startsWith("TABLE:")){const A=L.match(/TABLE:\s+"(.+?)"/);m=A?A[1].toUpperCase():"";continue}if(L==="END TABLE DATA"){m="";continue}const C=kb(L);switch(m){case"PROGRAM CONTROL":{const A=C.get("CurrUnits");if(A){const S=A.split(",").map(_=>_.trim());S[0]&&(r.force=S[0]),S[1]&&(r.length=S[1])}const b=C.get("ProgramName");b&&(a=`${b} Model`);break}case"MATERIAL PROPERTIES 01 - GENERAL":{const A=C.get("Material");A&&!s.has(A)&&s.set(A,{E:0,nu:0,G:0});break}case"MATERIAL PROPERTIES 02 - BASIC MECHANICAL PROPERTIES":{const A=C.get("Material");if(A){const b=s.get(A)||{E:0,nu:0,G:0};b.E=gn(C.get("E1")),b.G=gn(C.get("G12")),b.nu=gn(C.get("U12")),b.density=gn(C.get("UnitMass")),s.set(A,b)}break}case"FRAME SECTION PROPERTIES 01 - GENERAL":{const A=C.get("SectionName");A&&o.set(A,{material:C.get("Material")||"",shape:C.get("Shape")||"Rectangular",D:gn(C.get("t3")),B:gn(C.get("t2")),TF:gn(C.get("tf")),TW:gn(C.get("tw")),A:gn(C.get("Area")),Iz:gn(C.get("I33")),Iy:gn(C.get("I22")),J:gn(C.get("TorsConst"))});break}case"AREA SECTION PROPERTIES":{const A=C.get("Section");A&&u.set(A,{material:C.get("Material")||"",type:C.get("Type")||"Shell",thickness:gn(C.get("Thickness"))});break}case"JOINT COORDINATES":{const A=C.get("Joint");A&&f.set(A,[gn(C.get("XorR")),gn(C.get("Y")),gn(C.get("Z"))]);break}case"CONNECTIVITY - FRAME":{const A=C.get("Frame"),b=C.get("JointI"),S=C.get("JointJ");A&&b&&S&&l.push({name:A,j1:b,j2:S});break}case"CONNECTIVITY - AREA":{const A=C.get("Area");if(A){const b=parseInt(C.get("NumJoints")||"4"),S=[];for(let _=1;_<=b;_++){const D=C.get(`Joint${_}`);D&&S.push(D)}S.length>=3&&c.push({name:A,joints:S})}break}case"JOINT RESTRAINT ASSIGNMENTS":{const A=C.get("Joint");A&&d.set(A,[((x=C.get("U1"))==null?void 0:x.toLowerCase())==="yes",((y=C.get("U2"))==null?void 0:y.toLowerCase())==="yes",((N=C.get("U3"))==null?void 0:N.toLowerCase())==="yes",((w=C.get("R1"))==null?void 0:w.toLowerCase())==="yes",((T=C.get("R2"))==null?void 0:T.toLowerCase())==="yes",((M=C.get("R3"))==null?void 0:M.toLowerCase())==="yes"]);break}case"FRAME SECTION ASSIGNMENTS":{const A=C.get("Frame"),b=C.get("AnalSect");A&&b&&h.set(A,b);break}case"AREA SECTION ASSIGNMENTS":{const A=C.get("Area"),b=C.get("Section");A&&b&&p.set(A,b);break}case"JOINT LOADS - FORCE":{const A=C.get("Joint");A&&v.push({joint:A,fx:gn(C.get("F1")),fy:gn(C.get("F2")),fz:gn(C.get("F3")),mx:gn(C.get("M1")),my:gn(C.get("M2")),mz:gn(C.get("M3"))});break}}}return qb(r,a,s,o,u,f,l,c,d,h,p,v)}function jte(i){const e={force:"KN",length:"m"};let t="SAP2000 Model (legacy)";const r=new Map,a=new Map,s=new Map,o=new Map,u=[],f=[],l=new Map,c=[];let d="",h="";for(const p of i){const v=p.trim();if(!v||v.startsWith(";"))continue;if(!p.startsWith(" ")&&!p.startsWith("	")){const y=v.toUpperCase();if(y==="END")break;y.startsWith("SHELL SECTION")?d="SHELL SECTION":y.startsWith("FRAME SECTION")?d="FRAME SECTION":d=y.split(/\s+/)[0];continue}const m=kb(v),x=v.split(/\s+/);switch(d){case"SYSTEM":{const y=m.get("LENGTH");y&&(e.length=y);const N=m.get("FORCE");N&&(e.force=N);break}case"JOINT":{const y=x[0];o.set(y,[gn(m.get("X")),gn(m.get("Y")),gn(m.get("Z"))]);break}case"RESTRAINT":{const y=m.get("ADD"),N=m.get("DOF");if(y&&N){const w=N.split(","),T=[!1,!1,!1,!1,!1,!1];for(const M of w){const E=M.toUpperCase();(E==="UX"||E==="U1")&&(T[0]=!0),(E==="UY"||E==="U2")&&(T[1]=!0),(E==="UZ"||E==="U3")&&(T[2]=!0),(E==="RX"||E==="R1")&&(T[3]=!0),(E==="RY"||E==="R2")&&(T[4]=!0),(E==="RZ"||E==="R3")&&(T[5]=!0)}l.set(y,T)}break}case"MATERIAL":{const y=m.get("NAME");if(y)h=y,r.set(y,{E:0,nu:0,G:0});else if(h){const N=r.get(h),w=m.get("E");w&&(N.E=gn(w));const T=m.get("U");T&&(N.nu=gn(T)),N.G=N.E/(2*(1+N.nu))}break}case"SHELL":{const y=x[0],N=m.get("J");N&&f.push({name:y,joints:N.split(",")});break}case"SHELL SECTION":{const y=m.get("NAME");y&&s.set(y,{material:m.get("MAT")||"",type:m.get("TYPE")||"Shell",thickness:gn(m.get("TH"))});break}case"FRAME":{const y=x[0],N=m.get("J");if(N){const w=N.split(",");w.length>=2&&u.push({name:y,j1:w[0],j2:w[1]})}break}case"LOAD":{const y=m.get("ADD");y&&c.push({joint:y,fx:gn(m.get("UX")),fy:gn(m.get("UY")),fz:gn(m.get("UZ")),mx:gn(m.get("MX")),my:gn(m.get("MY")),mz:gn(m.get("MZ"))});break}}}return qb(e,t,r,a,s,o,u,f,l,new Map,new Map,c)}function qb(i,e,t,r,a,s,o,u,f,l,c,d){const h=[],p=new Map,v=[];for(const[M,E]of s)p.set(M,v.length),h.push(M),v.push([...E]);const m=[],x=[],y=[],N=new Map;for(const M of o){const E=p.get(M.j1),L=p.get(M.j2);if(E!==void 0&&L!==void 0){const C=m.length;m.push([E,L]),x.push(M.name),y.push("frame");const A=l.get(M.name);A&&N.set(C,A)}}for(const M of u){const E=M.joints.map(L=>p.get(L)).filter(L=>L!==void 0);if(E.length>=3){const L=m.length;m.push(E),x.push(M.name),y.push(E.length===3?"shell3":"shell4");const C=c.get(M.name);C&&N.set(L,C)}}const w=new Map;for(const[M,E]of f){const L=p.get(M);L!==void 0&&w.set(L,E)}const T=new Map;for(const M of d){const E=p.get(M.joint);if(E!==void 0){const L=T.get(E)||[0,0,0,0,0,0];L[0]+=M.fx,L[1]+=M.fy,L[2]+=M.fz,L[3]+=M.mx,L[4]+=M.my,L[5]+=M.mz,T.set(E,L)}}return{nodes:v,nodeNames:h,elements:m,elementNames:x,elementTypes:y,materials:t,frameSections:r,shellSections:a,elementSections:N,supports:w,loads:T,units:i,title:e}}function Jte(i){const e=[],{nodes:t,elements:r,elementTypes:a,materials:s,frameSections:o,shellSections:u,elementSections:f,supports:l,loads:c,units:d}=i;e.push("% ═══════════════════════════════════════════════════"),e.push("% Modelo importado de SAP2000 (.s2k)"),e.push(`% Unidades: ${d.force}, ${d.length}`),e.push(`% Nodos: ${t.length}, Elementos: ${r.length}`),e.push("% ═══════════════════════════════════════════════════"),e.push(""),e.push("% ── Nodos [x, y, z] ──");const h=t.map(m=>`  ${m[0]}, ${m[1]}, ${m[2]}`);e.push(`nodes = [${h.join(`;
 `)}]`),e.push("nNodes = size(nodes, 1)"),e.push("");const p=[],v=[];if(r.forEach((m,x)=>{a[x]==="frame"?p.push(x):v.push(x)}),p.length>0){e.push("% ── Elementos Frame [nodo_i, nodo_j] (1-based) ──");const m=p.map(N=>`  ${r[N][0]+1}, ${r[N][1]+1}`);e.push(`frames = [${m.join(`;
 `)}]`),e.push("nFrames = size(frames, 1)"),e.push(""),e.push("% ── Propiedades Frame [E, A, Iz, Iy, J, G] ──");const x=s.values().next().value||{E:25e6,nu:.2,G:1e7},y=[];for(const N of p){const w=f.get(N),T=w?o.get(w):null,M=T&&s.get(T.material)||x,E=M.E||x.E,L=M.nu||.2,C=M.G||E/(2*(1+L)),A=(T==null?void 0:T.A)||.01,b=(T==null?void 0:T.Iz)||1e-4,S=(T==null?void 0:T.Iy)||1e-4,_=(T==null?void 0:T.J)||1e-4;y.push(`  ${E}, ${A}, ${b}, ${S}, ${_}, ${C}`)}e.push(`frame_props = [${y.join(`;
 `)}]`),e.push("")}if(v.length>0){e.push("% ── Elementos Shell [nodo_1, nodo_2, ...] (1-based) ──");for(const y of v){const N=r[y];e.push(`shells(${v.indexOf(y)+1}, :) = [${N.map(w=>w+1).join(", ")}]`)}e.push(`nShells = ${v.length}`),e.push(""),e.push("% ── Propiedades Shell [E, nu, t] ──");const m=s.values().next().value||{E:25e6,nu:.2},x=[];for(const y of v){const N=f.get(y),w=N?u.get(N):null,T=w&&s.get(w.material)||m,M=T.E||m.E,E=T.nu||.2,L=(w==null?void 0:w.thickness)||.1;x.push(`  ${M}, ${E}, ${L}`)}e.push(`shell_props = [${x.join(`;
