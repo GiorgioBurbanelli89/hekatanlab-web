@@ -4,6 +4,9 @@ import { ViewCommand } from './viewer3d';
 import { k_truss2d, k_frame2d, k_frame3d, T2d, T3d, assemble, k_cst, k_q4 } from './fem';
 import { femMatlabLibrary } from './fem-matlab';
 import { getMesh as triangleMeshAsync, isTriangleReady } from './wasm/triangleMesh';
+import { deformHybrid } from './fem/deformHybrid';
+import { analyze } from './fem/analyze';
+import type { Node, Element, NodeInputs, ElementInputs } from './fem/data-model';
 // @ts-ignore
 import nerdamer from 'nerdamer';
 // @ts-ignore
@@ -688,6 +691,62 @@ export function createEngine() {
       return { N: math.matrix(N), V: math.matrix(V), M: math.matrix(M) };
     });
 
+    // fem_deform(nodes, elements, supports, loads, props)
+    // Uses awatif deformHybrid: TS for K local/T/assembly, WASM for large solve
+    // nodes: Nx3, elements: Mx2 or Mx3 (0-based indices)
+    // supports: map of node→[bool x6], loads: map of node→[fx,fy,fz,mx,my,mz]
+    // props: {E, nu, t, A, Iz, Iy, G, J}
+    // Returns: {deformations, reactions} maps
+    p.set('fem_deform', (...args: any[]) => {
+      const nds = toArray2DArg(args[0]);
+      const els = toArray2DArg(args[1]).map(r => r.map(v => Math.round(v) - 1)); // 1-based → 0-based
+      const supArr = toArray2DArg(args[2]); // [[nodeIdx, dx,dy,dz,rx,ry,rz], ...]
+      const loadArr = toArray2DArg(args[3]); // [[nodeIdx, fx,fy,fz,mx,my,mz], ...]
+      const E = typeof args[4] === 'number' ? args[4] : 100;
+      const nu = typeof args[5] === 'number' ? args[5] : 0.3;
+      const t = typeof args[6] === 'number' ? args[6] : 1;
+
+      const nodes: Node[] = nds.map(n => [n[0], n[1], n[2] || 0]);
+      const elements: Element[] = els;
+
+      const supports: NodeInputs['supports'] = new Map();
+      for (const s of supArr) {
+        const ni = Math.round(s[0]) - 1; // 1-based → 0-based
+        supports.set(ni, [!!s[1], !!s[2], !!s[3], !!s[4], !!s[5], !!s[6]]);
+      }
+
+      const loads: NodeInputs['loads'] = new Map();
+      for (const l of loadArr) {
+        const ni = Math.round(l[0]) - 1;
+        loads.set(ni, [l[1]||0, l[2]||0, l[3]||0, l[4]||0, l[5]||0, l[6]||0]);
+      }
+
+      const nodeInputs: NodeInputs = { supports, loads };
+      const elementInputs: ElementInputs = {
+        elasticities: new Map(elements.map((_, i) => [i, E])),
+        thicknesses: new Map(elements.map((_, i) => [i, t])),
+        poissonsRatios: new Map(elements.map((_, i) => [i, nu])),
+        shearModuli: new Map(elements.map((_, i) => [i, E / (2 * (1 + nu))])),
+      };
+
+      const result = deformHybrid(nodes, elements, nodeInputs, elementInputs);
+      if (!result) return math.matrix([[0]]);
+
+      // Convert deformations map to flat vector (MATLAB-friendly)
+      const nDof = nodes.length * 6;
+      const Uf = new Array(nDof).fill(0);
+      result.deformations.forEach((def, ni) => {
+        for (let d = 0; d < 6; d++) Uf[ni * 6 + d] = def[d];
+      });
+      return math.matrix(Uf.map(v => [v])); // column vector
+    });
+
+    // fem_analyze — post-process after deform
+    p.set('fem_analyze', (...args: any[]) => {
+      // TODO: connect analyze.ts
+      return math.matrix([[0]]);
+    });
+
     // freedofs(ndof, fixed_array) — returns complement DOF indices (1-based)
     p.set('freedofs', (ndof: number, fixed: any) => {
       let f: number[];
@@ -1231,7 +1290,7 @@ export function createEngine() {
       'k_truss2d','k_frame2d','k_frame3d','k_cst','k_q4','T2d','T3d','assemble',
       'T2d_truss','truss2d_Ke','truss3d_Ke',
       'meshRect_nodes','meshRect_cst','gen_truss_nodes','gen_truss_elements',
-      'gen_tower_nodes','gen_tower_elements','fixed_left_edge','getMesh',
+      'gen_tower_nodes','gen_tower_elements','fixed_left_edge','getMesh','fem_deform','fem_analyze',
       'assemble_k','solve_fem','reactions',
       'buildIsoDb','buildIsoDs','buildIsoQm','shell_bending_B','shell_shear_B','shell_membrane_K9','k_shell_tri',
       'show3d','show_deformed','show_contour','show_diagram','submat','subvec','fullvec','_idx','_setidx','freedofs','geneig','buckling_plot',
