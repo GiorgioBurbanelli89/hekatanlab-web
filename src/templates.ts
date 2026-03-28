@@ -1355,13 +1355,21 @@ end
 % Función: ensamblaje de placa CST
 % ─────────────────────────────────────────
 function [Kg] = assemble_cst(nds, els, nDof, E, nu, t)
-  nElem = size(els, 1);
-  Kg = zeros(nDof, nDof);
+  nElem = size(els, 1)
+  Kg = zeros(nDof, nDof)
   for e = range(1, nElem, 1)
-    na=els(e,1); nb=els(e,2); nc=els(e,3);
-    Ke = k_cst(E, nu, t, nds(na,1), nds(na,2), nds(nb,1), nds(nb,2), nds(nc,1), nds(nc,2));
-    d = [2*na-1, 2*na, 2*nb-1, 2*nb, 2*nc-1, 2*nc];
-    Kg = assemble(Kg, Ke, d);
+    na = els(e,1)
+    nb = els(e,2)
+    nc = els(e,3)
+    xa = nds(na,1)
+    ya = nds(na,2)
+    xb = nds(nb,1)
+    yb = nds(nb,2)
+    xc = nds(nc,1)
+    yc = nds(nc,2)
+    Ke = k_cst(E, nu, t, xa, ya, xb, yb, xc, yc)
+    d = [2*na-1, 2*na, 2*nb-1, 2*nb, 2*nc-1, 2*nc]
+    Kg = assemble(Kg, Ke, d)
   end
 end
 
@@ -1369,10 +1377,14 @@ end
 % Función: DOFs del borde izquierdo (x=0)
 % ─────────────────────────────────────────
 function [fdofs] = fixed_left_edge(nx, ny)
-  fdofs = [];
+  nBnd = ny + 1
+  fdofs = zeros(1, nBnd * 2)
+  k = 1
   for j = range(0, ny, 1)
-    n = j*(nx+1) + 1;
-    fdofs = [fdofs, 2*n-1, 2*n];
+    n = j*(nx+1) + 1
+    fdofs(k) = 2*n - 1
+    fdofs(k+1) = 2*n
+    k = k + 2
   end
 end
 

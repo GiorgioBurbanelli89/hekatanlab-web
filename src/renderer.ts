@@ -240,8 +240,8 @@ function valueToKatex(name: string, val: any): string | null {
 
   // Matrix / Vector
   const arr = toArray2D(val);
-  if (arr) {
-    const rows = arr.length, cols = arr[0].length;
+  if (arr && arr.length > 0 && arr[0] != null) {
+    const rows = arr.length, cols = Array.isArray(arr[0]) ? arr[0].length : 1;
 
     // Large arrays → compact summary
     if (rows > 12 || cols > 12) {

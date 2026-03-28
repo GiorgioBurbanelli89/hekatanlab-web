@@ -10,6 +10,9 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.26.0",
+    "awatif-fem": "^1.0.1",
+    "awatif-mesh": "^1.0.1",
+    "awatif-ui": "^1.0.1",
     "delaunator": "^5.1.0",
     "katex": "^0.16.0",
     "mathjs": "^13.0.0",

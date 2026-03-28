@@ -865,10 +865,24 @@ export function createEngine() {
   }
 
   function toArray2DArg(v: any): number[][] {
+    if (!v) return [];
+    // Handle ResultSet (from multi-line function returns)
+    if (v.entries) v = Array.isArray(v.entries) ? v.entries[v.entries.length - 1] : v;
+    if (v && typeof v.valueOf === 'function' && v.constructor?.name === 'ResultSet') {
+      const entries = v.valueOf();
+      v = Array.isArray(entries) ? entries[entries.length - 1] : v;
+    }
     if (v && typeof v.toArray === 'function') v = v.toArray();
     if (v && v._data) v = v._data;
     if (Array.isArray(v)) {
-      if (v.length > 0 && Array.isArray(v[0])) return v.map((r: any) => r.map(Number));
+      if (v.length > 0 && Array.isArray(v[0])) {
+        // Handle nested arrays [[1],[2]] vs [[1,2],[3,4]]
+        if (v[0].length === 1 && Array.isArray(v[0][0])) {
+          // Extra nesting: [[[1,2,3]],[[4,5,6]]] → [[1,2,3],[4,5,6]]
+          return v.map((r: any) => (Array.isArray(r[0]) ? r[0] : r).map(Number));
+        }
+        return v.map((r: any) => (Array.isArray(r) ? r : [r]).map(Number));
+      }
       return v.map((x: any) => [Number(x)]);
     }
     return [];
@@ -882,20 +896,40 @@ export function createEngine() {
     const meshMatch = code.match(/\[(\w+)\s*,\s*(\w+)(?:\s*,\s*(\w+))?\]\s*=\s*getMesh\(([^)]+)\)/);
     if (meshMatch) {
       try {
-        const args = meshMatch[4].split(';').map(s => s.trim());
-        // Parse points from code: e.g. "points" variable or inline [[0,0],[1,0],...]
-        // For now, evaluate the args using a temp parser
+        // Find variable definitions referenced in getMesh args
         const tmpParser = math.parser();
-        // Execute all lines up to getMesh to get variable values
+        // Register size override
+        tmpParser.set('size', (...a: any[]) => {
+          const s = math.size(a[0]);
+          const sa = s.toArray ? s.toArray() : (Array.isArray(s) ? s : [s]);
+          if (a.length === 1) return math.matrix(sa);
+          return sa[Math.round(Number(a[1])) - 1] || 0;
+        });
+        // Execute ALL non-function, non-getMesh lines to build scope
         const lines = code.split('\n');
+        let insideFunction = false;
         for (const line of lines) {
           const t = line.trim();
           if (t.includes('getMesh')) break;
-          if (!t || t.startsWith('%') || t.startsWith('function')) continue;
-          try { tmpParser.evaluate(t.replace(/'/g, '"')); } catch {}
+          if (/^function\s/.test(t)) { insideFunction = true; continue; }
+          if (t === 'end' && insideFunction) { insideFunction = false; continue; }
+          if (insideFunction) continue;
+          if (!t || t.startsWith('%')) continue;
+          // Split by semicolons outside brackets
+          let depth = 0, parts: string[] = [], cur = '';
+          for (const ch of t) {
+            if (ch === '[' || ch === '(') depth++;
+            else if (ch === ']' || ch === ')') depth--;
+            if (ch === ';' && depth === 0) { if (cur.trim()) parts.push(cur.trim()); cur = ''; }
+            else cur += ch;
+          }
+          if (cur.trim()) parts.push(cur.trim());
+          for (const part of parts) {
+            try { tmpParser.evaluate(part); } catch {}
+          }
         }
         // Get the argument values
-        const argParts = meshMatch[4].split(',').map(s => s.trim());
+        const argParts = meshMatch[4].split(',').map((s: string) => s.trim());
         let pts: number[][] = [];
         let poly: number[] = [];
         let maxArea = 3;
@@ -912,18 +946,18 @@ export function createEngine() {
         }
         if (pts.length >= 3) {
           const result = await triangleMeshAsync(pts, poly, maxArea, minAngle);
-          // Inject results: replace getMesh call with matrix assignments
           const ndsName = meshMatch[1];
           const elsName = meshMatch[2];
           const bndName = meshMatch[3];
-          const ndsStr = result.nodes.map(r => r.join(',')).join('; ');
-          const elsStr = result.elements.map(r => r.map(x => x + 1).join(',')).join('; '); // 0→1 based
+          const ndsStr = result.nodes.map((r: number[]) => r.join(',')).join('; ');
+          const elsStr = result.elements.map((r: number[]) => r.map(x => x + 1).join(',')).join('; ');
           let replacement = `${ndsName} = [${ndsStr}]\n${elsName} = [${elsStr}]`;
           if (bndName) {
-            const bndStr = result.boundaryIndices.map(x => x + 1).join(','); // 0→1 based
+            const bndStr = result.boundaryIndices.map((x: number) => x + 1).join(',');
             replacement += `\n${bndName} = [${bndStr}]`;
           }
           processedCode = processedCode.replace(meshMatch[0], replacement);
+          console.log(`[getMesh] Generated ${result.nodes.length} nodes, ${result.elements.length} triangles`);
         }
       } catch (e: any) {
         console.warn('getMesh pre-process error:', e.message);

@@ -55,6 +55,10 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
 
   const nodes = data.nodes;
   const elements = data.elements;
+  if (!nodes || !elements || nodes.length === 0) {
+    container.innerHTML = '<p style="color:red;padding:20px">Error: nodos o elementos vacíos</p>';
+    return container;
+  }
   const dofPerNode = data.dofPerNode || 3;
 
   // Compute bounds
