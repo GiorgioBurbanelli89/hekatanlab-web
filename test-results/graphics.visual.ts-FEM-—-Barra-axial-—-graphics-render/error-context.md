@@ -1,0 +1,411 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]: HékatanLab
+    - generic [ref=e4]: MATLAB Web
+    - button "▶ Ejecutar" [ref=e5] [cursor=pointer]
+    - button "Limpiar" [ref=e6] [cursor=pointer]
+    - combobox [ref=e7]:
+      - option "📂 Ejemplos"
+      - option "Cap1 — Vectores"
+      - option "Cap1 — Tipos de matrices"
+      - option "Cap1 — Submatrices"
+      - option "Cap2 — Suma y producto"
+      - option "Cap2 — Transpuesta y traza"
+      - option "Cap3 — Determinante"
+      - option "Cap3 — Inversa"
+      - option "Cap4 — Sistema 2x2"
+      - option "Cap4 — Sistema 3x3"
+      - option "Cap4 — Sistema 4x4 (estructura)"
+      - option "Cap4 — Funciones MATLAB"
+      - option "📚 Funciones FEM (referencia)"
+      - option "FEM — Barra axial" [selected]
+      - option "FEM — 3 resortes"
+      - option "FEM — Truss 2D (3 barras)"
+      - option "FEM — Nave industrial 3D"
+      - option "Awatif — Plate (Delaunay shell)"
+      - option "FEM — Shell Tri (placa)"
+      - option "FEM — Placa CST"
+      - option "FEM — Ensamblaje con for"
+      - option "FEM — Frame 2D + Diagramas N/V/M"
+      - option "FEM — Space Frame 3D"
+      - option "Álgebra simbólica"
+      - option "Estadística y regresión"
+      - option "Operaciones básicas"
+      - option "Gráficas 2D"
+      - option "Gráficas 3D"
+      - option "Gráficas de funciones"
+      - option "Control de flujo"
+      - option "Awatif — Truss Paramétrico"
+      - option "Awatif — Estructura 3D"
+      - option "Awatif — Placa CST"
+      - option "Awatif — Zapata + Pedestal"
+      - option "Buckling — Restricción discreta"
+      - option "Buckling — Restricción continua"
+      - option "Test — Bar (Logan 3.9)"
+      - option "Test — Membrane CST"
+      - option "Test — Plate 10x10 isotropic"
+    - button "📁 Import" [ref=e8] [cursor=pointer]
+    - button "💾 Export" [ref=e9] [cursor=pointer]
+    - button "📚 Funciones" [ref=e10] [cursor=pointer]
+    - button "⚡" [ref=e11] [cursor=pointer]
+    - button "☀" [ref=e12] [cursor=pointer]
+    - button "?" [ref=e13] [cursor=pointer]
+  - generic [ref=e14]:
+    - generic [ref=e16]:
+      - generic [ref=e17]: EDITOR — MATLAB/Octave (autorun)
+      - textbox "% Escribe código MATLAB aquí a = 3 A = [1, 2; 3, 4] x = inv(A) * [5; 6]" [active] [ref=e18]:
+        - /placeholder: "% Escribe código MATLAB aquí\na = 3\nA = [1, 2; 3, 4]\nx = inv(A) * [5; 6]"
+        - text: "% ═══════════════════════════════════════════ % FEM: Barra axial — derivacion desde cero % ═══════════════════════════════════════════ L = 2 E = 210000 A = 0.01 % ══ PASO 1: Funciones de forma ══ % N1(x) = (L-x)/L = 1 - x/L % N2(x) = x/L % Evaluamos en x=0 y x=L para verificar: disp(\"N1(0)=1, N1(L)=0 — vale 1 en nodo 1\") disp(\"N2(0)=0, N2(L)=1 — vale 1 en nodo 2\") % ══ PASO 2: Derivadas → Matriz B ══ % B = dN/dx = [dN1/dx, dN2/dx] (fila) % dN1/dx = -1/L, dN2/dx = 1/L B = [[-1/L, 1/L]] % ══ PASO 3: B'*B (producto exterior 2x2) ══ BtB = transpose(B) * B % ══ PASO 4: Rigidez K = integral(B'*E*A*B dx, 0, L) ══ % Como B es constante, integral = B'*E*A*B * L K = E * A / L * [1, -1; -1, 1] % Verificar disp(\"K = EA/L * [1,-1; -1,1]\") K % ══ PASO 5: Carga y solucion ══ q = 5 P = 20 % Vector de fuerzas equivalentes (carga distribuida) F_dist = [q * L / 2; q * L / 2] % Resolver (nodo 1 fijo → solo DOF 2 libre) K_red = K(2, 2) F_red = q * L / 2 + P u2 = F_red / K_red % Verificacion analitica u_exact = (P * L + q * L^2 / 2) / (E * A) error_pct = abs(u2 - u_exact) / u_exact * 100 % Reaccion y esfuerzo R1 = -(P + q * L) sigma = E * u2 / L"
+    - generic [ref=e19]:
+      - generic [ref=e20]: OUTPUT
+      - generic [ref=e21]:
+        - generic [ref=e23]: "FEM: Barra axial — derivacion desde cero"
+        - generic [ref=e29]:
+          - math [ref=e31]:
+            - generic [ref=e33]:
+              - generic [ref=e34]: L
+              - generic [ref=e35]: =
+              - generic [ref=e36]: "2"
+          - generic [ref=e37]:
+            - generic [ref=e38]: L =
+            - generic [ref=e39]: "2"
+        - generic [ref=e43]:
+          - math [ref=e45]:
+            - generic [ref=e47]:
+              - generic [ref=e48]: E
+              - generic [ref=e49]: =
+              - generic [ref=e50]: "210000"
+          - generic [ref=e51]:
+            - generic [ref=e52]: E =
+            - generic [ref=e53]: "210000"
+        - generic [ref=e57]:
+          - math [ref=e59]:
+            - generic [ref=e61]:
+              - generic [ref=e62]: A
+              - generic [ref=e63]: =
+              - generic [ref=e64]: "0.01"
+          - generic [ref=e65]:
+            - generic [ref=e66]: A =
+            - generic [ref=e67]: "0.01"
+        - generic [ref=e70]: N1(x) = (L-x)/L = 1 - x/L
+        - generic [ref=e71]: N2(x) = x/L
+        - generic [ref=e72]: "Evaluamos en x=0 y x=L para verificar:"
+        - generic [ref=e73]: N1(0)=1, N1(L)=0 — vale 1 en nodo 1
+        - generic [ref=e74]: N2(0)=0, N2(L)=1 — vale 1 en nodo 2
+        - generic [ref=e77]: B = dN/dx = [dN1/dx, dN2/dx] (fila)
+        - generic [ref=e78]: dN1/dx = -1/L, dN2/dx = 1/L
+        - generic [ref=e82]:
+          - math [ref=e84]:
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - generic [ref=e88]: B
+                - generic [ref=e89]:
+                  - generic [ref=e90]: "1"
+                  - generic [ref=e91]: ×
+                  - generic [ref=e92]: "2"
+              - generic [ref=e93]: =
+              - generic [ref=e94]:
+                - generic [ref=e95]: "["
+                - generic [ref=e97]:
+                  - generic [ref=e100]:
+                    - generic [ref=e101]: −
+                    - generic [ref=e102]: "0.5"
+                  - generic [ref=e105]: "0.5"
+                - generic [ref=e106]: "]"
+          - generic [ref=e107]:
+            - generic [ref=e108]:
+              - generic [ref=e109]:
+                - text: B
+                - generic [ref=e115]: 1×2
+              - text: =
+            - generic [ref=e120]:
+              - generic [ref=e121]: "["
+              - generic [ref=e123]:
+                - generic [ref=e128]: −0.5
+                - generic [ref=e136]: "0.5"
+              - generic [ref=e140]: "]"
+        - generic [ref=e146]:
+          - math [ref=e148]:
+            - generic [ref=e150]:
+              - generic [ref=e151]:
+                - generic [ref=e152]: BtB
+                - generic [ref=e153]:
+                  - generic [ref=e154]: "2"
+                  - generic [ref=e155]: ×
+                  - generic [ref=e156]: "2"
+              - generic [ref=e157]: =
+              - generic [ref=e158]:
+                - generic [ref=e159]: "["
+                - generic [ref=e160]:
+                  - generic [ref=e161]:
+                    - generic [ref=e164]: "0.25"
+                    - generic [ref=e167]:
+                      - generic [ref=e168]: −
+                      - generic [ref=e169]: "0.25"
+                  - generic [ref=e170]:
+                    - generic [ref=e173]:
+                      - generic [ref=e174]: −
+                      - generic [ref=e175]: "0.25"
+                    - generic [ref=e178]: "0.25"
+                - generic [ref=e179]: "]"
+          - generic [ref=e180]:
+            - generic [ref=e181]:
+              - generic [ref=e182]:
+                - generic [ref=e183]: BtB
+                - generic [ref=e189]: 2×2
+              - text: =
+            - generic [ref=e194]:
+              - generic [ref=e195]: "["
+              - generic [ref=e197]:
+                - generic [ref=e201]:
+                  - generic [ref=e202]: "0.25"
+                  - generic [ref=e203]: −0.25
+                - generic [ref=e210]:
+                  - generic [ref=e211]: −0.25
+                  - generic [ref=e212]: "0.25"
+              - generic [ref=e216]: "]"
+        - generic [ref=e219]: Como B es constante, integral = B'*E*A*B * L
+        - generic [ref=e223]:
+          - math [ref=e225]:
+            - generic [ref=e227]:
+              - generic [ref=e228]:
+                - generic [ref=e229]: K
+                - generic [ref=e230]:
+                  - generic [ref=e231]: "2"
+                  - generic [ref=e232]: ×
+                  - generic [ref=e233]: "2"
+              - generic [ref=e234]: =
+              - generic [ref=e235]:
+                - generic [ref=e236]: "["
+                - generic [ref=e237]:
+                  - generic [ref=e238]:
+                    - generic [ref=e241]: "1050"
+                    - generic [ref=e244]:
+                      - generic [ref=e245]: −
+                      - generic [ref=e246]: "1050"
+                  - generic [ref=e247]:
+                    - generic [ref=e250]:
+                      - generic [ref=e251]: −
+                      - generic [ref=e252]: "1050"
+                    - generic [ref=e255]: "1050"
+                - generic [ref=e256]: "]"
+          - generic [ref=e257]:
+            - generic [ref=e258]:
+              - generic [ref=e259]:
+                - text: K
+                - generic [ref=e265]: 2×2
+              - text: =
+            - generic [ref=e270]:
+              - generic [ref=e271]: "["
+              - generic [ref=e273]:
+                - generic [ref=e277]:
+                  - generic [ref=e278]: "1050"
+                  - generic [ref=e279]: −1050
+                - generic [ref=e286]:
+                  - generic [ref=e287]: −1050
+                  - generic [ref=e288]: "1050"
+              - generic [ref=e292]: "]"
+        - generic [ref=e294]: Verificar
+        - generic [ref=e295]: K = EA/L * [1,-1; -1,1]
+        - generic [ref=e299]:
+          - math [ref=e301]:
+            - generic [ref=e303]:
+              - generic [ref=e304]:
+                - generic [ref=e305]: ans
+                - generic [ref=e306]:
+                  - generic [ref=e307]: "2"
+                  - generic [ref=e308]: ×
+                  - generic [ref=e309]: "2"
+              - generic [ref=e310]: =
+              - generic [ref=e311]:
+                - generic [ref=e312]: "["
+                - generic [ref=e313]:
+                  - generic [ref=e314]:
+                    - generic [ref=e317]: "1050"
+                    - generic [ref=e320]:
+                      - generic [ref=e321]: −
+                      - generic [ref=e322]: "1050"
+                  - generic [ref=e323]:
+                    - generic [ref=e326]:
+                      - generic [ref=e327]: −
+                      - generic [ref=e328]: "1050"
+                    - generic [ref=e331]: "1050"
+                - generic [ref=e332]: "]"
+          - generic [ref=e333]:
+            - generic [ref=e334]:
+              - generic [ref=e335]:
+                - generic [ref=e336]: ans
+                - generic [ref=e342]: 2×2
+              - text: =
+            - generic [ref=e347]:
+              - generic [ref=e348]: "["
+              - generic [ref=e350]:
+                - generic [ref=e354]:
+                  - generic [ref=e355]: "1050"
+                  - generic [ref=e356]: −1050
+                - generic [ref=e363]:
+                  - generic [ref=e364]: −1050
+                  - generic [ref=e365]: "1050"
+              - generic [ref=e369]: "]"
+        - generic [ref=e375]:
+          - math [ref=e377]:
+            - generic [ref=e379]:
+              - generic [ref=e380]: q
+              - generic [ref=e381]: =
+              - generic [ref=e382]: "5"
+          - generic [ref=e383]:
+            - generic [ref=e384]: q =
+            - generic [ref=e385]: "5"
+        - generic [ref=e389]:
+          - math [ref=e391]:
+            - generic [ref=e393]:
+              - generic [ref=e394]: P
+              - generic [ref=e395]: =
+              - generic [ref=e396]: "20"
+          - generic [ref=e397]:
+            - generic [ref=e398]: P =
+            - generic [ref=e399]: "20"
+        - generic [ref=e401]: Vector de fuerzas equivalentes (carga distribuida)
+        - generic [ref=e405]:
+          - math [ref=e407]:
+            - generic [ref=e409]:
+              - generic [ref=e410]:
+                - generic [ref=e411]: F
+                - generic [ref=e412]:
+                  - generic [ref=e413]: dist
+                  - generic [ref=e414]: ","
+                  - generic [ref=e415]: "2"
+                  - generic [ref=e416]: ×
+                  - generic [ref=e417]: "1"
+              - generic [ref=e418]: =
+              - generic [ref=e419]:
+                - generic [ref=e420]: "["
+                - generic [ref=e421]:
+                  - generic [ref=e425]: "5"
+                  - generic [ref=e429]: "5"
+                - generic [ref=e430]: "]"
+          - generic [ref=e431]:
+            - generic [ref=e432]:
+              - generic [ref=e433]:
+                - text: F
+                - generic [ref=e439]:
+                  - generic [ref=e440]: dist
+                  - text: ", 2×1"
+              - text: =
+            - generic [ref=e445]:
+              - generic [ref=e446]: "["
+              - generic [ref=e452]:
+                - generic [ref=e453]: "5"
+                - generic [ref=e454]: "5"
+              - generic [ref=e458]: "]"
+        - generic [ref=e460]: Resolver (nodo 1 fijo → solo DOF 2 libre)
+        - generic [ref=e464]:
+          - math [ref=e466]:
+            - generic [ref=e468]:
+              - generic [ref=e469]:
+                - generic [ref=e470]: K
+                - generic [ref=e471]: red
+              - generic [ref=e472]: =
+              - generic [ref=e473]: "1050"
+          - generic [ref=e474]:
+            - generic [ref=e475]:
+              - generic [ref=e476]:
+                - text: K
+                - generic [ref=e483]: red
+              - text: =
+            - generic [ref=e487]: "1050"
+        - generic [ref=e491]:
+          - math [ref=e493]:
+            - generic [ref=e495]:
+              - generic [ref=e496]:
+                - generic [ref=e497]: F
+                - generic [ref=e498]: red
+              - generic [ref=e499]: =
+              - generic [ref=e500]: "25"
+          - generic [ref=e501]:
+            - generic [ref=e502]:
+              - generic [ref=e503]:
+                - text: F
+                - generic [ref=e510]: red
+              - text: =
+            - generic [ref=e514]: "25"
+        - generic [ref=e518]:
+          - math [ref=e520]:
+            - generic [ref=e522]:
+              - generic [ref=e523]: u2
+              - generic [ref=e524]: =
+              - generic [ref=e525]: "0.0238095"
+          - generic [ref=e526]:
+            - generic [ref=e527]:
+              - generic [ref=e528]: u2
+              - text: =
+            - generic [ref=e529]: "0.0238095"
+        - generic [ref=e531]: Verificacion analitica
+        - generic [ref=e535]:
+          - math [ref=e537]:
+            - generic [ref=e539]:
+              - generic [ref=e540]:
+                - generic [ref=e541]: u
+                - generic [ref=e542]: exact
+              - generic [ref=e543]: =
+              - generic [ref=e544]: "0.0238095"
+          - generic [ref=e545]:
+            - generic [ref=e546]:
+              - generic [ref=e547]:
+                - text: u
+                - generic [ref=e554]: exact
+              - text: =
+            - generic [ref=e558]: "0.0238095"
+        - generic [ref=e562]:
+          - math [ref=e564]:
+            - generic [ref=e566]:
+              - generic [ref=e567]: e
+              - generic [ref=e568]: r
+              - generic [ref=e569]: r
+              - generic [ref=e570]: o
+              - generic [ref=e571]:
+                - generic [ref=e572]: r
+                - generic [ref=e573]: pct
+              - generic [ref=e574]: =
+              - generic [ref=e575]: "0"
+          - generic [ref=e576]:
+            - generic [ref=e577]:
+              - text: erro
+              - generic [ref=e578]:
+                - text: r
+                - generic [ref=e585]: pct
+              - text: =
+            - generic [ref=e589]: "0"
+        - generic [ref=e591]: Reaccion y esfuerzo
+        - generic [ref=e595]:
+          - math [ref=e597]:
+            - generic [ref=e599]:
+              - generic [ref=e600]: R1
+              - generic [ref=e601]: =
+              - generic [ref=e602]: −
+              - generic [ref=e603]: "30"
+          - generic [ref=e604]:
+            - generic [ref=e605]:
+              - generic [ref=e606]: R1
+              - text: =
+            - generic [ref=e607]: −30
+        - generic [ref=e611]:
+          - math [ref=e613]:
+            - generic [ref=e615]:
+              - generic [ref=e616]: sigma
+              - generic [ref=e617]: =
+              - generic [ref=e618]: "2500"
+          - generic [ref=e619]:
+            - generic [ref=e620]:
+              - generic [ref=e621]: sigma
+              - text: =
+            - generic [ref=e622]: "2500"
+  - generic [ref=e623]:
+    - generic [ref=e624]: 50 líneas
+    - generic [ref=e625]: 7ms
+    - generic [ref=e626]: 16 vars
+    - generic [ref=e627]: HékatanLab Web v1.0
+```
