@@ -9,7 +9,7 @@ export interface DiagramData {
 }
 
 export interface StructureViewData {
-  type: 'mesh' | 'deformed' | 'contour' | 'diagram';
+  type: 'mesh' | 'deformed' | 'contour' | 'diagram' | 'deformed_contour';
   nodes: number[][];        // [[x,y,z], ...]
   elements: number[][];     // [[i,j], [i,j,k], [i,j,k,l], ...]  (1-based)
   U?: number[];             // displacement vector (all DOFs)
@@ -30,6 +30,11 @@ export class ViewCommand {
 }
 
 export function renderStructure(data: StructureViewData, W = 600, H = 450): HTMLDivElement {
+  // Z-up (engineering convention, like awatif) — MUST be set BEFORE creating
+  // the camera and OrbitControls so the initial up vector is (0,0,1).
+  // Otherwise Three.js defaults to Y-up and the Y/Z axes appear swapped.
+  THREE.Object3D.DEFAULT_UP = new THREE.Vector3(0, 0, 1);
+
   const container = document.createElement('div');
   container.style.width = W + 'px';
   container.style.height = H + 'px';
@@ -42,6 +47,7 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   scene.background = new THREE.Color(getBg());
 
   const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 10000);
+  camera.up.set(0, 0, 1);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(W, H);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -50,8 +56,6 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
-
-  THREE.Object3D.DEFAULT_UP = new THREE.Vector3(0, 0, 1);
 
   const nodes = data.nodes;
   const elements = data.elements;
@@ -73,14 +77,28 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   const maxDim = Math.max(size.x, size.y, size.z) || 10;
 
   // ── Draw elements ──
-  if (data.type === 'contour' && data.values) {
+  if (data.type === 'deformed_contour' && data.U && data.values) {
+    const scale = (data.scale && data.scale > 0) ? data.scale : autoScale(nodes, data.U, dofPerNode);
+    const defNodes = getDeformedNodes(nodes, data.U, dofPerNode, scale);
+    addContour(scene, defNodes, elements, data.values);
+    // Thin wireframe on deformed mesh for edge visibility
+    for (const el of elements) {
+      if (el.length < 3) continue;
+      const pts: THREE.Vector3[] = [];
+      for (const idx of el) { const n = defNodes[idx-1]; if (n) pts.push(new THREE.Vector3(n[0], n[1]||0, n[2]||0)); }
+      pts.push(pts[0].clone());
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 1, transparent: true, opacity: 0.3 })));
+    }
+    // Original shape dashed
+    addWireframe(scene, nodes, elements, 0x4488cc, true);
+  } else if (data.type === 'contour' && data.values) {
     addContour(scene, nodes, elements, data.values);
   } else if (data.type === 'diagram' && data.diagram) {
-    // Draw structure in gray + force diagram overlay
     addWireframe(scene, nodes, elements, 0x555566);
     addDiagram(scene, nodes, elements, data.diagram, maxDim);
   } else if (data.type === 'deformed' && data.U) {
-    const scale = data.scale || 1;
+    const scale = (data.scale && data.scale > 0) ? data.scale : autoScale(nodes, data.U, dofPerNode);
     const defNodes = getDeformedNodes(nodes, data.U, dofPerNode, scale);
     addWireframe(scene, defNodes, elements, 0xff7043);
     addWireframe(scene, nodes, elements, 0x4488cc, true);
@@ -89,7 +107,9 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   }
 
   // ── Nodes (spheres — awatif-ui style) ──
-  addNodes(scene, nodes, isLight() ? 0x2e7d32 : 0x66bb6a, maxDim);
+  const displayNodes = (data.type === 'deformed_contour' && data.U)
+    ? getDeformedNodes(nodes, data.U, dofPerNode, data.scale || 1) : nodes;
+  addNodes(scene, displayNodes, isLight() ? 0x2e7d32 : 0x66bb6a, maxDim);
 
   // ── Supports ──
   if (data.supports) addSupports(scene, nodes, data.supports, maxDim);
@@ -107,10 +127,9 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   dl.position.set(maxDim, -maxDim, maxDim * 2);
   scene.add(dl);
 
-  // Camera
+  // Camera (Z-up: offset in -Y so +Z is "up" on screen)
   const dist = maxDim * 2.5;
   camera.position.set(center.x + dist * 0.6, center.y - dist * 0.8, center.z + dist * 0.5);
-  camera.up.set(0, 0, 1);
   controls.target.copy(center);
   controls.update();
 
@@ -123,8 +142,8 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
     container.appendChild(td);
   }
 
-  // Legend for contour
-  if (data.type === 'contour' && data.values) addLegend(container, data.values);
+  // Legend for contour / deformed_contour
+  if ((data.type === 'contour' || data.type === 'deformed_contour') && data.values) addLegend(container, data.values);
 
   // Animate
   let animId = 0;
@@ -164,7 +183,7 @@ function addWireframe(scene: THREE.Scene, nodes: number[][], elements: number[][
 
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
     const mat = dashed
-      ? new THREE.LineDashedMaterial({ color, dashSize: 0.3, gapSize: 0.15, opacity: 0.4, transparent: true })
+      ? new THREE.LineDashedMaterial({ color, dashSize: 0.3, gapSize: 0.15, opacity: 0.6, transparent: true })
       : new THREE.LineBasicMaterial({ color, linewidth: 2 });
     const line = new THREE.Line(geo, mat);
     if (dashed) line.computeLineDistances();
@@ -483,6 +502,25 @@ function addLegend(container: HTMLDivElement, values: number[]) {
   container.appendChild(legend);
   container.appendChild(labelMax);
   container.appendChild(labelMin);
+}
+
+/** Auto-calculate deformation scale: max deformation ≈ 10% of model size */
+function autoScale(nodes: number[][], U: number[], dofPerNode: number): number {
+  let maxDim = 0;
+  const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+  for (const [x, y, z] of nodes) {
+    min[0] = Math.min(min[0], x); min[1] = Math.min(min[1], y||0); min[2] = Math.min(min[2], z||0);
+    max[0] = Math.max(max[0], x); max[1] = Math.max(max[1], y||0); max[2] = Math.max(max[2], z||0);
+  }
+  maxDim = Math.max(max[0]-min[0], max[1]-min[1], max[2]-min[2]) || 1;
+  let maxDisp = 0;
+  for (let i = 0; i < nodes.length; i++) {
+    const b = i * dofPerNode;
+    const dx = Math.abs(U[b] || 0), dy = Math.abs(U[b+1] || 0), dz = dofPerNode >= 3 ? Math.abs(U[b+2] || 0) : 0;
+    maxDisp = Math.max(maxDisp, dx, dy, dz);
+  }
+  if (maxDisp < 1e-20) return 1;
+  return maxDim / (10 * maxDisp);
 }
 
 function getDeformedNodes(nodes: number[][], U: number[], dofPerNode: number, scale: number): number[][] {

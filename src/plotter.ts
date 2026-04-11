@@ -55,6 +55,11 @@ export function renderPlot(data: PlotData, width = 560, height = 400): HTMLDivEl
 // ══════════════════════════════════════════
 
 function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
+  // Z-up (engineering convention, like awatif) — MUST be set BEFORE creating
+  // the camera and OrbitControls so the initial up vector is (0,0,1).
+  // Otherwise Three.js defaults to Y-up and the Y/Z axes appear swapped.
+  THREE.Object3D.DEFAULT_UP = new THREE.Vector3(0, 0, 1);
+
   const container = document.createElement('div');
   container.style.width = W + 'px';
   container.style.height = H + 'px';
@@ -67,8 +72,9 @@ function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(getBg());
 
-  // Camera
+  // Camera (inherits DEFAULT_UP = (0,0,1))
   const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 1000);
+  camera.up.set(0, 0, 1);
 
   // Renderer
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -76,13 +82,10 @@ function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   container.appendChild(renderer.domElement);
 
-  // Controls
+  // Controls (read camera.up at construction — must already be Z-up)
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
-
-  // Z-up (engineering convention, like awatif)
-  THREE.Object3D.DEFAULT_UP = new THREE.Vector3(0, 0, 1);
 
   // Build geometry
   let bounds: { min: THREE.Vector3; max: THREE.Vector3 };
@@ -101,10 +104,9 @@ function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
   addGrid(scene, gridSize, center);
   addAxes(scene, gridSize * 0.4, center);
 
-  // Camera position
+  // Camera position (Z-up: camera offset in -Y so +Z is "up" on screen)
   const dist = gridSize * 1.8;
   camera.position.set(center.x + dist * 0.7, center.y - dist * 0.7, center.z + dist * 0.5);
-  camera.up.set(0, 0, 1);
   controls.target.copy(center);
   controls.update();
 
