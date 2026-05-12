@@ -137,6 +137,192 @@ disp("Si todos los plots aparecen arriba, las graficas funcionan OK")` },
   // Todos en modo MATLAB puro
   // ═════════════════════════════════════════════════
 
+  { name: 'FE01b — Cantilever Wall Q4 (con contorno)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
+% CANTILEVER WALL Q4 - Solver FEM completo + CONTORNO
+%
+% Ejemplo: muro 5x3 m, espesor 0.2 m, empotrado en la base,
+% carga lateral de 100 kN repartida en el top.
+%
+% Funciona IGUAL en MATLAB real y en HekatanLab Web.
+% Si lo copias a MATLAB, las graficas (surf con view 2) salen perfecto.
+% ═══════════════════════════════════════════
+
+% --- DATOS ---
+W = 5;            % ancho del muro
+H = 3;            % altura
+t = 0.2;          % espesor
+P = 100;          % carga lateral total (en el top)
+E = 25000;        % modulo elastico (MPa, pero usamos como escalar)
+nu = 0.2;
+nx = 4;           % elementos en x
+ny = 3;           % elementos en y
+
+fprintf("Muro %.1fx%.1f m, t=%.2f, P=%.0f, malla %dx%d\\n", W, H, t, P, nx, ny)
+
+% --- MALLA ---
+n_dof = 2;                    % u, v por nodo
+ne = nx*ny;                   % elementos
+nj = (nx+1)*(ny+1);           % nodos
+n_total = n_dof*nj;
+dx = W/nx;
+dy = H/ny;
+
+% Coordenadas nodales
+nds = zeros(nj, 2);
+for j = 0:ny
+  for i = 0:nx
+    k = j*(nx+1) + i + 1;
+    nds(k, 1) = i*dx;
+    nds(k, 2) = j*dy;
+  end
+end
+
+% Conectividad (4 nodos por elemento, CCW)
+els = zeros(ne, 4);
+for j = 0:ny-1
+  for i = 0:nx-1
+    e = j*nx + i + 1;
+    bl = j*(nx+1) + i + 1;
+    els(e, 1) = bl;
+    els(e, 2) = bl + 1;
+    els(e, 3) = bl + (nx+1) + 1;
+    els(e, 4) = bl + (nx+1);
+  end
+end
+
+% --- MATRIZ CONSTITUTIVA ---
+D = (E/(1-nu^2)) * [1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
+
+% --- RIGIDEZ DE UN ELEMENTO Ke (8x8) ---
+J11 = dx/2; J22 = dy/2;
+detJ = J11*J22;
+g = 1/sqrt(3);
+gpts = [-g,-g; g,-g; g,g; -g,g];
+
+Ke = zeros(8, 8);
+for ig = 1:4
+  xi = gpts(ig, 1); eta = gpts(ig, 2);
+  dNxi  = [-(1-eta)/4,  (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+  dNeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+  dNx = dNxi / J11;
+  dNy = dNeta / J22;
+  B = zeros(3, 8);
+  for i = 1:4
+    B(1, 2*i-1) = dNx(i);
+    B(2, 2*i)   = dNy(i);
+    B(3, 2*i-1) = dNy(i);
+    B(3, 2*i)   = dNx(i);
+  end
+  Ke = Ke + transpose(B) * D * B * t * detJ;
+end
+
+% --- ENSAMBLE GLOBAL ---
+K = zeros(n_total, n_total);
+for e = 1:ne
+  % DOFs globales del elemento (8 DOFs)
+  dofs = zeros(1, 8);
+  for i = 1:4
+    n_id = els(e, i);
+    dofs(2*i-1) = 2*n_id - 1;
+    dofs(2*i)   = 2*n_id;
+  end
+  % Sumar Ke en posiciones globales
+  for i = 1:8
+    for j = 1:8
+      K(dofs(i), dofs(j)) = K(dofs(i), dofs(j)) + Ke(i, j);
+    end
+  end
+end
+
+% --- BCs: penalizacion en nodos de la base (y=0) ---
+kp = 1e20;
+for i = 1:(nx+1)
+  j = 2*i - 1;
+  K(j, j) = K(j, j) + kp;
+  K(j+1, j+1) = K(j+1, j+1) + kp;
+end
+
+% --- VECTOR DE CARGAS: P horizontal repartida en el top ---
+F = zeros(n_total, 1);
+p_n = P/(nx+1);
+for i = 1:(nx+1)
+  j_top = ny*(nx+1) + i;
+  F(2*j_top - 1) = p_n;
+end
+
+% --- RESOLVER K*u = F ---
+disp("Resolviendo K*u = F ...")
+u_full = inv(K) * F;       % en MATLAB: u_full = K \\ F (mas rapido)
+
+% --- EXTRAER DESPLAZAMIENTOS ---
+u_disp = zeros(nj, 1);
+v_disp = zeros(nj, 1);
+for i = 1:nj
+  u_disp(i) = u_full(2*i - 1);
+  v_disp(i) = u_full(2*i);
+end
+
+% Maximo en el top
+u_max = 0; u_node = 0;
+for i = 1:(nx+1)
+  j_top = ny*(nx+1) + i;
+  if abs(u_disp(j_top)) > abs(u_max)
+    u_max = u_disp(j_top);
+    u_node = j_top;
+  end
+end
+fprintf("Desplazamiento horizontal max: u_max = %.4e en nodo %d\\n", u_max, u_node)
+
+% --- VISUALIZACION: contorno de u(x, y) ---
+% Reorganizar u_disp como grilla para surf/contour
+nx1 = nx + 1;
+ny1 = ny + 1;
+U_grid = zeros(ny1, nx1);
+for j = 1:ny1
+  for i = 1:nx1
+    k = (j-1)*nx1 + i;
+    U_grid(j, i) = u_disp(k);
+  end
+end
+
+xc = 0:dx:W;
+yc = 0:dy:H;
+
+% surf con view(2) + shading interp = contorno 2D estilo MATLAB
+surf(xc, yc, U_grid)
+view(2)
+shading interp
+colorbar
+title("Desplazamiento horizontal u(x,y)")
+xlabel("x [m]")
+ylabel("y [m]")
+axis equal
+
+% --- VISUALIZACION 2: contorno de v(x, y) ---
+V_grid = zeros(ny1, nx1);
+for j = 1:ny1
+  for i = 1:nx1
+    k = (j-1)*nx1 + i;
+    V_grid(j, i) = v_disp(k);
+  end
+end
+
+surf(xc, yc, V_grid)
+view(2)
+shading interp
+colorbar
+title("Desplazamiento vertical v(x,y)")
+xlabel("x [m]")
+ylabel("y [m]")
+axis equal
+
+% --- VALIDACION vs viga Euler-Bernoulli ---
+I_w = t*W^3 / 12;
+delta_beam = P*H^3 / (3*E*I_w);
+ratio = abs(u_max) / delta_beam;
+fprintf("\\nDeflexion teorica viga: %.4e\\n", delta_beam)
+fprintf("Ratio FEM/Viga: %.3f (>1 esperado, FEM captura corte)\\n", ratio)` },
+
   { name: 'FE01 — Membrana Q4 (plane stress)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % MEMBRANA Q4 — Plane Stress
 % 4 nodos x 2 DOFs (u, v) = 8 DOFs
