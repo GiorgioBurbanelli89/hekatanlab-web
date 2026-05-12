@@ -413,14 +413,20 @@ end
 xc = 0:dx:W;
 yc = 0:dy:H;
 
+% --- Paleta SAP2000 (14 stops, magenta(min) -> azul oscuro(max)) ---
+% MATLAB default es 'parula' (azul-amarillo). Para usar SAP2000 hay que
+% definir la paleta explicito y aplicarla con colormap(sap2k).
+% En HekatanLab ya se usa SAP2000 por defecto (colormap stub es no-op).
+sap2k = [255 0 255; 255 0 180; 255 0 0; 255 80 0; 255 140 0; 255 190 0; 255 255 0; 180 255 0; 0 255 0; 0 255 180; 0 255 255; 0 180 255; 0 0 255; 0 0 180] / 255;
+
 % surf con view(2) + shading('interp') = contorno 2D estilo MATLAB
-% (en HekatanLab usa la paleta SAP2000 - igual a Hekatan Struct)
 % IMPORTANTE: 'figure' antes de cada plot crea VENTANA NUEVA en MATLAB,
 % sino el segundo plot SOBREESCRIBE al primero (y solo verias v(x,y)).
 figure
 surf(xc, yc, U_grid)
 view(2)
 shading('interp')
+colormap(sap2k)
 colorbar
 title("Desplazamiento horizontal u(x,y)")
 xlabel("x [m]")
@@ -440,6 +446,7 @@ figure        % <-- Figure 2 (nueva ventana en MATLAB)
 surf(xc, yc, V_grid)
 view(2)
 shading('interp')
+colormap(sap2k)
 colorbar
 title("Desplazamiento vertical v(x,y)")
 xlabel("x [m]")

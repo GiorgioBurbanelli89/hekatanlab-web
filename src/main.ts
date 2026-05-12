@@ -197,9 +197,9 @@ document.getElementById('btn-clear')!.addEventListener('click', () => { setEdito
 // Aplicar modo persistido (después de wirear botones y engine)
 applyMode(currentMode);
 
-// Templates — al seleccionar, solo carga el codigo en el editor.
-// El usuario presiona "Ejecutar" cuando quiere correr (igual que MATLAB).
-// Esto evita el lag de auto-run en templates pesados como FEM completo.
+// Templates — al seleccionar, carga el codigo y auto-corre (ambos modos:
+// Hekatan Lab y MATLAB). Para templates pesados (FEM full) puede tardar
+// unos segundos. El user puede apagar autorun via globalThis.__hekatanNoAutorun = true.
 document.getElementById('template-select')!.addEventListener('change', (e) => {
   const sel = e.target as HTMLSelectElement;
   const t = TEMPLATES.find(x => x.name === sel.value);
@@ -208,10 +208,14 @@ document.getElementById('template-select')!.addEventListener('change', (e) => {
     suppressAutorun = true;
     setEditorText(t.code);
     suppressAutorun = false;
-    // Limpiar output anterior para que no confunda con el template nuevo
-    output.innerHTML = '<div style="padding:1em;opacity:0.6;font-style:italic">' +
-      'Codigo cargado. Presiona "Ejecutar" para correr el template.' +
-      '</div>';
+    // Autorun por defecto (escape: __hekatanNoAutorun=true para desactivar)
+    if (typeof globalThis !== 'undefined' && (globalThis as any).__hekatanNoAutorun) {
+      output.innerHTML = '<div style="padding:1em;opacity:0.6;font-style:italic">' +
+        'Auto-run deshabilitado. Presiona "Ejecutar" para correr.' +
+        '</div>';
+    } else {
+      run();
+    }
   }
 });
 
