@@ -413,19 +413,19 @@ end
 xc = 0:dx:W;
 yc = 0:dy:H;
 
-% surf con view(2) + shading("interp") = contorno 2D estilo MATLAB
+% surf con view(2) + shading('interp') = contorno 2D estilo MATLAB
 % (en HekatanLab usa la paleta SAP2000 - igual a Hekatan Struct)
 % IMPORTANTE: 'figure' antes de cada plot crea VENTANA NUEVA en MATLAB,
 % sino el segundo plot SOBREESCRIBE al primero (y solo verias v(x,y)).
 figure
 surf(xc, yc, U_grid)
 view(2)
-shading("interp")
+shading('interp')
 colorbar
 title("Desplazamiento horizontal u(x,y)")
 xlabel("x [m]")
 ylabel("y [m]")
-axis("equal")
+axis('equal')
 
 % --- VISUALIZACION 2: contorno de v(x, y) ---
 V_grid = zeros(ny1, nx1);
@@ -439,12 +439,12 @@ end
 figure        % <-- Figure 2 (nueva ventana en MATLAB)
 surf(xc, yc, V_grid)
 view(2)
-shading("interp")
+shading('interp')
 colorbar
 title("Desplazamiento vertical v(x,y)")
 xlabel("x [m]")
 ylabel("y [m]")
-axis("equal")
+axis('equal')
 
 % --- VISUALIZACION 3 (solo HekatanLab): contorno FEM real sobre la malla ---
 % show_contour(nodes, elements, values, title) usa la paleta SAP2000
