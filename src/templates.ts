@@ -417,7 +417,7 @@ yc = 0:dy:H;
 % MATLAB default es 'parula' (azul-amarillo). Para usar SAP2000 hay que
 % definir la paleta explicito y aplicarla con colormap(sap2k).
 % En HekatanLab ya se usa SAP2000 por defecto (colormap stub es no-op).
-sap2k = [255 0 255; 255 0 180; 255 0 0; 255 80 0; 255 140 0; 255 190 0; 255 255 0; 180 255 0; 0 255 0; 0 255 180; 0 255 255; 0 180 255; 0 0 255; 0 0 180] / 255;
+sap2k = [255,0,255; 255,0,180; 255,0,0; 255,80,0; 255,140,0; 255,190,0; 255,255,0; 180,255,0; 0,255,0; 0,255,180; 0,255,255; 0,180,255; 0,0,255; 0,0,180] / 255;
 
 % surf con view(2) + shading('interp') = contorno 2D estilo MATLAB
 % IMPORTANTE: 'figure' antes de cada plot crea VENTANA NUEVA en MATLAB,
