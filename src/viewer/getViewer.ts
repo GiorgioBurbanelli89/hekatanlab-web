@@ -27,8 +27,16 @@ function isLight(): boolean { return document.body.classList.contains('light'); 
 export function createViewer(input: ViewerInput, W = 600, H = 450): HTMLDivElement {
   const { nodes: rawNodes, elements: rawElements, supportNodes, loadData, title } = input;
 
-  // Convert to awatif types
-  const nodeArr: Node[] = rawNodes.map(n => [n[0], n[1], n[2] || 0] as Node);
+  // Detectar si la malla es 2D (todos los z == 0 o ausentes) o 3D (algun z != 0).
+  // En modo 2D, el usuario espera que su "y" sea VERTICAL en pantalla
+  // (convencion MATLAB / dibujo plano: X horizontal, Y vertical). Pero Three.js
+  // con Z-up engineering convention tiene Y como PROFUNDIDAD.
+  // Solucion: en 2D, mapeamos (x, y) -> (x, 0, y) para que el "y" del usuario
+  // aparezca vertical. En 3D dejamos (x, y, z) tal cual (Z-up engineering).
+  const is2D = rawNodes.every(n => (n[2] || 0) === 0);
+  const nodeArr: Node[] = is2D
+    ? rawNodes.map(n => [n[0], 0, n[1]] as Node)        // 2D: y -> Z vertical
+    : rawNodes.map(n => [n[0], n[1], n[2] || 0] as Node); // 3D: tal cual
   const elemArr: Element[] = rawElements;
 
   // Calculate grid size from model extent
@@ -75,7 +83,13 @@ export function createViewer(input: ViewerInput, W = 600, H = 450): HTMLDivEleme
   if (loadData) {
     for (const ld of loadData) {
       const idx = Math.round(ld[0]);
-      loadMap.set(idx, [ld[1]||0, ld[2]||0, ld[3]||0, 0, 0, 0]);
+      // En 2D la carga [fx, fy] del usuario se mapea a [fx, 0, fy] para que
+      // siga el mismo swap de los nodos (Y del usuario -> Z vertical).
+      if (is2D) {
+        loadMap.set(idx, [ld[1]||0, 0, ld[2]||0, 0, 0, 0]);
+      } else {
+        loadMap.set(idx, [ld[1]||0, ld[2]||0, ld[3]||0, 0, 0, 0]);
+      }
     }
   }
   const structure: Structure = {
