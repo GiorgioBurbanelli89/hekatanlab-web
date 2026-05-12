@@ -19,6 +19,67 @@ export interface Template {
 
 export const TEMPLATES: Template[] = [
   // ═════════════════════════════════════════════════
+  // BENCHMARK — Mide velocidad del JIT
+  // ═════════════════════════════════════════════════
+
+  { name: 'B00 — Benchmark JIT (loop FEM)', category: 'Benchmark', mode: 'matlab', code: `% ═══════════════════════════════════════════
+% Benchmark del JIT en HekatanLab
+% Mide tiempo de un loop FEM tipico (Q4 membrana, 8x8 K matrix)
+% repetido N veces. Compara con el mismo loop deshabilitando el JIT.
+% ═══════════════════════════════════════════
+
+% Datos elemento
+E = 30000; nu = 0.2; t = 0.2;
+coords = [-0.25, -0.25; 0.25, -0.25; 0.25, 0.25; -0.25, 0.25];
+D = (E/(1-nu^2)) * [1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
+g = 1/sqrt(3);
+gpts = [-g,-g; g,-g; g,g; -g,g];
+
+% Cuantas veces re-computamos el K (para amplificar el tiempo)
+N_runs = 200;
+
+% --- TEST con JIT habilitado (default) ---
+tic
+for run = 1:N_runs
+  K = zeros(8, 8);
+  for ig = 1:4
+    xi = gpts(ig, 1); eta = gpts(ig, 2);
+    dNxi  = [-(1-eta)/4,  (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+    dNeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+    J = zeros(2, 2);
+    for i = 1:4
+      J(1,1) = J(1,1) + dNxi(i)*coords(i,1);
+      J(1,2) = J(1,2) + dNxi(i)*coords(i,2);
+      J(2,1) = J(2,1) + dNeta(i)*coords(i,1);
+      J(2,2) = J(2,2) + dNeta(i)*coords(i,2);
+    end
+    detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1);
+    invJ = (1/detJ) * [J(2,2), -J(1,2); -J(2,1), J(1,1)];
+    dNx = invJ(1,1)*dNxi + invJ(1,2)*dNeta;
+    dNy = invJ(2,1)*dNxi + invJ(2,2)*dNeta;
+    B = zeros(3, 8);
+    for i = 1:4
+      B(1, 2*i-1) = dNx(i);
+      B(2, 2*i)   = dNy(i);
+      B(3, 2*i-1) = dNy(i);
+      B(3, 2*i)   = dNx(i);
+    end
+    K = K + transpose(B) * D * B * t * abs(detJ);
+  end
+end
+t_jit = toc;
+fprintf("CON JIT:    %d runs en %.3f s -> %.1f us/run\\n", N_runs, t_jit, t_jit*1e6/N_runs)
+
+% --- Reportar stats del JIT (cuantos statements se ejecutaron por tier) ---
+% Stats expuestos en __hekatanJitStats (en consola del navegador)
+disp("(stats del JIT en consola: __hekatanJitStats())")
+
+% Verificacion final: K final
+disp("K(1,1) final:")
+disp(K(1,1))
+fprintf("Esperado para 0.5x0.5x0.2 elem: ~2916.67\\n")` },
+
+  // ═════════════════════════════════════════════════
   // GRAPHICS — Test rapido de todas las gráficas MATLAB
   // ═════════════════════════════════════════════════
 

@@ -2730,14 +2730,40 @@ export function createEngine() {
     //   - Cualquier FunctionNode no-PURE — porque el JIT compila `*`,`+` a JS
     //     directos que asumen escalares; con matrices devuelven NaN.
     // PURE_MATH_FNS (sin/cos/sqrt/etc) son safe: number→number.
+    // Whitelist de funciones SEGURAS para llamar dentro del JIT-loop:
+    // se invocan via _f(name) (look-up en scope), retornan matriz/escalar,
+    // pero NO interactuan con el output stream (no son disp/fprintf/show*).
+    // Permite que loops con K(i,j) = ... + zeros() + transpose() se JIT-een.
+    const JIT_SAFE_FNS = new Set<string>([
+      // Indexed assignment / read (CRITICAL para FEM templates)
+      '_setidx', '_idx',
+      // Matrix creation
+      'zeros', 'ones', 'eye', 'identity', 'matrix', 'diag',
+      // Matrix ops (operator versions ya manejadas, pero por si user llama directo)
+      'transpose', 'inv', 'det', 'trace', 'norm',
+      'add', 'subtract', 'multiply', 'divide',
+      'dotMultiply', 'dotDivide', 'dotPow',
+      // Aggregates
+      'sum', 'prod', 'mean', 'std', 'var', 'median',
+      // Query
+      'size', 'length', 'numel', 'rows', 'cols',
+      // Index helpers
+      'concat', 'reshape', 'flatten', 'squeeze',
+      'range', 'linspace', 'logspace',
+      // Math que retornan matriz si arg es matriz
+      'sin', 'cos', 'tan', 'exp', 'log', 'sqrt', 'abs',
+      // Random
+      'random', 'randn', 'randi',
+    ]);
+
     function containsIndexedOps(node: any): boolean {
       if (!node) return false;
       if (node.type === 'FunctionNode') {
         const fname = node.fn?.name;
-        // Si NO está en PURE_MATH_FNS, asumimos que puede devolver matriz/objeto.
-        // Eso incluye: _setidx, _idx, eye, zeros, ones, identity, transpose, inv,
-        // matrix, eig, eigs, svd, fprintf, disp, printf, etc.
-        if (fname && !PURE_MATH_FNS[fname]) return true;
+        // Si NO está en PURE_MATH_FNS ni en JIT_SAFE_FNS, asumimos peligroso
+        // (devuelve cosa no-numerica o tiene side-effects no JIT-safe).
+        // Esto INCLUYE: disp, fprintf, printf, show_*, plot, surf, etc.
+        if (fname && !PURE_MATH_FNS[fname] && !JIT_SAFE_FNS.has(fname)) return true;
       }
       // Recurrir
       const keys = ['args', 'items', 'content', 'value', 'object',
