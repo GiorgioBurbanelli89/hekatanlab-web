@@ -19,6 +19,59 @@ export interface Template {
 
 export const TEMPLATES: Template[] = [
   // ═════════════════════════════════════════════════
+  // GRAPHICS — Test rapido de todas las gráficas MATLAB
+  // ═════════════════════════════════════════════════
+
+  { name: 'G00 — TEST Gráficas MATLAB (todas)', category: 'Graphics MATLAB', mode: 'matlab', code: `% ═══════════════════════════════════════════
+% TEST de todas las funciones de graficas
+% MATLAB puro (sin range/map de HekatanLab)
+% Si algo no se ve, esa funcion no esta soportada
+% ═══════════════════════════════════════════
+
+% 1) plot(x, y, title) - linea 2D
+x = 0:0.1:2*pi;
+y = sin(x);
+plot(x, y, "plot: y = sin(x)")
+
+% 2) scatter(x, y, title) - puntos dispersos
+xs = [1, 2, 3, 4, 5, 6, 7, 8];
+ys = [2.1, 3.9, 6.2, 7.8, 10.1, 12.3, 13.9, 16.2];
+scatter(xs, ys, "scatter: datos experimentales")
+
+% 3) bar(x, y, title) - grafico de barras
+cat = 1:5;
+val = [23, 45, 12, 67, 34];
+bar(cat, val, "bar: ventas por region")
+
+% 4) stem(x, y, title) - impulsos
+n = 0:20;
+amort = sin(n) .* exp(-n/5);
+stem(n, amort, "stem: senal amortiguada")
+
+% 5) fplot(expr, [a, b], title) - graficar expresion
+fplot("x^3 - 3*x^2 + 2", [-2, 4], "fplot: x^3 - 3x^2 + 2")
+fplot("sin(x) * cos(2*x)", [0, 6.28], "fplot: sin(x)*cos(2x)")
+
+% 6) plot3(x, y, z, title) - curva 3D
+t = 0:0.1:6*pi;
+xh = cos(t);
+yh = sin(t);
+plot3(xh, yh, t, "plot3: helice 3D")
+
+% 7) surf(x, y, Z, title) - superficie
+xg = -4:0.5:4;
+yg = -4:0.5:4;
+Z = meshz(xg, yg, "sin(sqrt(x^2+y^2+0.01))/sqrt(x^2+y^2+0.01)");
+surf(xg, yg, Z)
+title("surf: sombrero mexicano")
+
+% 8) hist(data, bins, title) - histograma
+datos = randn(1, 500);
+hist(datos, 20, "hist: distribucion normal")
+
+disp("Si todos los plots aparecen arriba, las graficas funcionan OK")` },
+
+  // ═════════════════════════════════════════════════
   // FEM Elementos — 7 ejemplos por tipo de elemento
   // Todos en modo MATLAB puro
   // ═════════════════════════════════════════════════
@@ -95,18 +148,23 @@ fprintf("Simetria: max|K-K'| = %.2e\\n", max(max(abs(K - transpose(K)))))
 %  - Valores grandes concentrados en la diagonal
 %  - Pares (u, v) por nodo (estructura de bloque 2x2)
 idx = 1:8;
-surf(idx, idx, K, "Heatmap matriz Ke - Membrana Q4 (8x8)")
+surf(idx, idx, K)
+title("Heatmap matriz Ke - Membrana Q4 (8x8)")
 
-% --- FEM RESUELTO: cantilever 2x2 elementos con CONTORNO ---
-disp("--- FEM mini: cantilever 2x2 elementos ---")
-% Malla 3x3 nodos (9 nodos, 4 elementos cuadrados)
+% --- FEM mini: malla 2x2 elementos cantilever ---
+disp("--- Malla mini: 2x2 elementos ---")
 nds = [0,0; 0.25,0; 0.5,0; 0,0.25; 0.25,0.25; 0.5,0.25; 0,0.5; 0.25,0.5; 0.5,0.5];
 els = [1,2,5,4; 2,3,6,5; 4,5,8,7; 5,6,9,8];
 
-% Mostramos la malla con soportes en izquierda, carga horizontal en derecha
-sups = [1, 4, 7];                  % empotrado en x=0 (3 nodos)
-loads = [6, 100, 0; 9, 100, 0];    % carga horizontal en nodos 6 y 9
-show3d(nds, els, "Malla Q4 — cantilever empotrado-cargado", sups, loads)` },
+% Visualizar nodos (MATLAB compatible)
+scatter(nds(:,1), nds(:,2))
+title("Nodos de la malla 2x2 Q4 (cantilever empotrado en x=0)")
+
+% Nota: en HekatanLab tambien funciona show3d() con BCs y cargas:
+%   sups  = [1, 4, 7];
+%   loads = [6, 100, 0; 9, 100, 0];
+%   show3d(nds, els, "Malla cantilever", sups, loads)
+% En MATLAB puro: usar patch() o plot() por elemento.` },
 
   { name: 'FE02 — Placa delgada Q4 (Kirchhoff/DKQ)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % PLACA DELGADA — Kirchhoff (DKQ-style)
@@ -173,7 +231,8 @@ fprintf("max|Ke| = %.3e\\n", max(max(abs(K))))
 % Estructura de bloques 3x3 por nodo: [w, thx, thy].
 % Notas el patron en bloques?
 idx = 1:12;
-surf(idx, idx, K, "Heatmap Ke - Placa delgada Kirchhoff (12x12)")` },
+surf(idx, idx, K)
+title("Heatmap Ke - Placa delgada Kirchhoff (12x12)")` },
 
   { name: 'FE03 — Placa gruesa Q4 (Mindlin-Reissner)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % PLACA GRUESA — Mindlin-Reissner
@@ -263,17 +322,20 @@ fprintf("max|Ke| = %.3e (simetria %.2e)\\n", max(max(abs(K))), max(max(abs(K-tra
 % Mindlin tiene contribucion EXTRA de corte (1x1 Gauss) que aparece en
 % los bloques relacionados a w (vs Kirchhoff que solo tiene flexion).
 idx = 1:12;
-surf(idx, idx, K, "Heatmap Ke - Placa gruesa Mindlin (12x12)")
+surf(idx, idx, K)
+title("Heatmap Ke - Placa gruesa Mindlin (12x12)")
 
-% --- MALLA PLATE con BCs para visualizar contornos de deflexion ---
+% --- Malla 2x2 placa Mindlin simplemente apoyada (MATLAB compatible) ---
 disp("--- Malla 2x2 placa Mindlin simplemente apoyada ---")
 nds = [0,0; 0.5,0; 1.0,0; 0,0.5; 0.5,0.5; 1.0,0.5; 0,1.0; 0.5,1.0; 1.0,1.0];
 els = [1,2,5,4; 2,3,6,5; 4,5,8,7; 5,6,9,8];
-% Soportes: 4 esquinas (1, 3, 7, 9) simplemente apoyadas
-sups = [1, 3, 7, 9];
-% Carga vertical centrada
-loads = [5, 0, 0, -1000];   % w en nodo 5, fuerza = -1000 N
-show3d(nds, els, "Placa Mindlin - 4 apoyos + carga central", sups, loads)` },
+scatter(nds(:,1), nds(:,2))
+title("Nodos placa 2x2 - 4 apoyos en esquinas + carga central")
+
+% Nota: en HekatanLab tambien funciona show3d() con BCs y cargas:
+%   sups  = [1, 3, 7, 9];
+%   loads = [5, 0, 0, -1000];
+%   show3d(nds, els, "Placa Mindlin", sups, loads)` },
 
   { name: 'FE04 — Placa Laminada (composite ABD)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % PLACA LAMINADA (LAYERED COMPOSITE)
@@ -341,9 +403,12 @@ fprintf("max|B| = %.3e (debe ser ~0 para [0/90/90/0])\\n", max(max(abs(B))))
 % Para laminado simetrico: A (membrana) y D (flexion) son densos,
 % B (acople) es practicamente cero.
 idx = 1:3;
-surf(idx, idx, A, "Matriz A - membrana (3x3)")
-surf(idx, idx, B, "Matriz B - acople (debe ser ~0)")
-surf(idx, idx, D, "Matriz D - flexion (3x3)")` },
+surf(idx, idx, A)
+title("Matriz A - membrana (3x3)")
+surf(idx, idx, B)
+title("Matriz B - acople (debe ser ~0)")
+surf(idx, idx, D)
+title("Matriz D - flexion (3x3)")` },
 
   { name: 'FE05 — Shell Thin (Membrana + Kirchhoff)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % SHELL DELGADO (THIN SHELL)
@@ -419,7 +484,8 @@ fprintf("Bending esta en DOFs (3,4,5; 8,9,10; 13,14,15; 18,19,20)\\n")
 %  - Bloque BENDING (12x12): DOFs (w, thx, thy) por nodo
 % Estan acoplados via los DOFs locales (entrelazados de 5 en 5)
 idx = 1:20;
-surf(idx, idx, K, "Heatmap Ke - Shell Thin (20x20, membrana + Kirchhoff)")` },
+surf(idx, idx, K)
+title("Heatmap Ke - Shell Thin (20x20, membrana + Kirchhoff)")` },
 
   { name: 'FE06 — Shell Thick (Membrana + Mindlin)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % SHELL GRUESO (THICK SHELL)
@@ -513,7 +579,8 @@ fprintf("max|Ke| = %.3e\\n", max(max(abs(K))))
 % (integrado con 1x1 Gauss). Va a tener valores mas grandes en los
 % bloques de (w, thx, thy) que el shell thin.
 idx = 1:20;
-surf(idx, idx, K, "Heatmap Ke - Shell Thick (20x20, membrana + Mindlin)")` },
+surf(idx, idx, K)
+title("Heatmap Ke - Shell Thick (20x20, membrana + Mindlin)")` },
 
   { name: 'FE07 — Shell Thin + Frame (combinado)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % SHELL THIN + FRAME (combinacion)
@@ -652,16 +719,18 @@ disp("Ensamble OK: shell (Q4) + frame (beam) conectados por nodo 4")
 %  - 1 nodo extra del frame (6 DOFs) en la esquina inferior derecha
 %  - El nodo 4 (compartido) acopla las dos zonas
 idx = 1:n_total;
-surf(idx, idx, K_global, "Heatmap K_global - Shell Thin + Frame (30x30)")
+surf(idx, idx, K_global)
+title("Heatmap K_global - Shell Thin + Frame (30x30)")
 
-% --- VISUALIZACION 3D de la geometria ---
-% Nodos del shell y nodo extra del frame
-nds_total = [coords_s; 0.25, 0.25];   % nodos 1-4 del shell + nodo 5 del frame
-nds_total(5,:) = [coords_s(4,1) + L, coords_s(4,2)];   % frame extiende desde nodo 4
-% Elementos: shell + linea del frame
-els_shell = [1, 2, 3, 4];
-% Solo dibujamos el shell por show3d (no maneja mezcla Q4 + linea directamente)
-show3d(coords_s, els_shell, "Shell Q4 + frame al nodo 4")` },
+% --- Visualizacion de la geometria (MATLAB compatible) ---
+% Nodos: 4 del shell + 1 extra del frame
+nds_total = [coords_s; coords_s(4,1) + L, coords_s(4,2)];
+scatter(nds_total(:,1), nds_total(:,2))
+title("Geometria: Shell Q4 (nodos 1-4) + Frame (nodo 4 -> 5)")
+
+% Nota: en HekatanLab tambien funciona show3d() para vista 3D:
+%   els_shell = [1, 2, 3, 4];
+%   show3d(coords_s, els_shell, "Shell Q4 + frame")` },
   // ── Cap 1: Tipos de matrices ──
   { name: 'Cap1 — Vectores', category: 'Herrera Cap 1', code: `% ═══════════════════════════════════════════
 % Cap 1: Vectores fila y columna
@@ -1291,7 +1360,8 @@ plot3(xh, yh, t, "Hélice 3D")
 xg = range(-4, 4, 0.5)
 yg = range(-4, 4, 0.5)
 Z = meshz(xg, yg, "sin(sqrt(x^2+y^2+0.01))/sqrt(x^2+y^2+0.01)")
-surf(xg, yg, Z, "Sombrero mexicano")` },
+surf(xg, yg, Z)
+title("Sombrero mexicano")` },
 
   // ── fplot ──
   { name: 'Gráficas de funciones', category: 'Plotting', code: `% ═══════════════════════════════════════════
