@@ -289,6 +289,7 @@ xc = 0:dx:W;
 yc = 0:dy:H;
 
 % surf con view(2) + shading interp = contorno 2D estilo MATLAB
+% (en HekatanLab usa la paleta SAP2000 - igual a Hekatan Struct)
 surf(xc, yc, U_grid)
 view(2)
 shading interp
@@ -315,6 +316,18 @@ title("Desplazamiento vertical v(x,y)")
 xlabel("x [m]")
 ylabel("y [m]")
 axis equal
+
+% --- VISUALIZACION 3 (solo HekatanLab): contorno FEM real sobre la malla ---
+% show_contour(nodes, elements, values, title) usa la paleta SAP2000
+% identica a Hekatan Struct. Muestra el contorno sobre la geometria
+% real del Q4 con la malla visible, no como una grilla rectangular.
+% En MATLAB no existe show_contour; el try/catch hace que falle silencioso.
+try
+  show_contour(nds, els, u_disp, "u(x,y) — SAP2000 colormap (Hekatan Struct style)")
+  show_contour(nds, els, v_disp, "v(x,y) — SAP2000 colormap (Hekatan Struct style)")
+catch
+  % show_contour solo existe en HekatanLab — ignorar en MATLAB
+end
 
 % --- VALIDACION vs viga Euler-Bernoulli ---
 I_w = t*W^3 / 12;

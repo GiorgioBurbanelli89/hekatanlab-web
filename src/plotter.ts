@@ -21,6 +21,46 @@ export interface PlotData {
 const COLORS = [0x4fc3f7, 0xff7043, 0x66bb6a, 0xab47bc, 0xffa726, 0xef5350, 0x26c6da, 0xec407a];
 const COLORS_LIGHT = [0x1976d2, 0xe64a19, 0x2e7d32, 0x7b1fa2, 0xf57c00, 0xc62828, 0x00838f, 0xad1457];
 
+// ── SAP2000 contour colormap — replica EXACTA del "Display Deformed Shape →
+// Contours" de SAP2000/CSiBridge/ETABS. 14 stops:
+//   min(t=0)=magenta → rosa → rojo → naranja → amarillo → verde → cian → azul oscuro(t=1)
+// Portado desde hekatan-struct/hekatan-ui/src/color-map/getColorMap.ts
+const SAP2000_PALETTE: [number, number, number, number][] = [
+  [0.000, 255,   0, 255],  // magenta (min)
+  [0.077, 255,   0, 180],  // rosa
+  [0.154, 255,   0,   0],  // rojo
+  [0.231, 255,  80,   0],  // rojo-naranja
+  [0.308, 255, 140,   0],  // naranja
+  [0.385, 255, 190,   0],  // amarillo-naranja
+  [0.462, 255, 255,   0],  // amarillo
+  [0.538, 180, 255,   0],  // amarillo-verde
+  [0.615,   0, 255,   0],  // verde
+  [0.692,   0, 255, 180],  // verde-cian
+  [0.769,   0, 255, 255],  // cian
+  [0.846,   0, 180, 255],  // cian-azul
+  [0.923,   0,   0, 255],  // azul
+  [1.000,   0,   0, 180],  // azul oscuro (max)
+];
+
+/** Lookup en la paleta SAP2000 interpolando linealmente entre stops. Devuelve [0..1, 0..1, 0..1]. */
+function sap2000Color(t: number): [number, number, number] {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < SAP2000_PALETTE.length - 1; i++) {
+    const [t0, r0, g0, b0] = SAP2000_PALETTE[i];
+    const [t1, r1, g1, b1] = SAP2000_PALETTE[i + 1];
+    if (t <= t1) {
+      const f = (t - t0) / (t1 - t0);
+      return [
+        (r0 + (r1 - r0) * f) / 255,
+        (g0 + (g1 - g0) * f) / 255,
+        (b0 + (b1 - b0) * f) / 255
+      ];
+    }
+  }
+  const last = SAP2000_PALETTE[SAP2000_PALETTE.length - 1];
+  return [last[1] / 255, last[2] / 255, last[3] / 255];
+}
+
 function isLightTheme(): boolean { return document.body.classList.contains('light'); }
 function getBg(): number { return isLightTheme() ? 0xf0f0f0 : 0x111118; }
 function getBgHex(): string { return isLightTheme() ? '#f0f0f0' : '#111118'; }
@@ -192,10 +232,11 @@ function addSurf(scene: THREE.Scene, data: PlotData): { min: THREE.Vector3; max:
       min.min(new THREE.Vector3(xGrid[i], yGrid[j], z));
       max.max(new THREE.Vector3(xGrid[i], yGrid[j], z));
 
-      // Color by Z height (rainbow)
+      // Color by Z height — paleta SAP2000 (igual a Hekatan Struct shellResults)
+      // Convencion SAP2000: t=0 (MIN) = magenta; t=1 (MAX) = azul oscuro.
       const t = (z - zMin) / (zMax - zMin);
-      const c = new THREE.Color().setHSL((1 - t) * 0.67, 0.9, 0.5);
-      colors.push(c.r, c.g, c.b);
+      const [r, g, b] = sap2000Color(t);
+      colors.push(r, g, b);
     }
   }
 

@@ -2,6 +2,29 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
+// ── SAP2000 contour colormap (replica de Hekatan Struct) ──
+// 14 stops: magenta(min) → rosa → rojo → naranja → amarillo → verde → cian → azul oscuro(max)
+const SAP2000_PALETTE: [number, number, number, number][] = [
+  [0.000, 255,   0, 255], [0.077, 255,   0, 180], [0.154, 255,   0,   0],
+  [0.231, 255,  80,   0], [0.308, 255, 140,   0], [0.385, 255, 190,   0],
+  [0.462, 255, 255,   0], [0.538, 180, 255,   0], [0.615,   0, 255,   0],
+  [0.692,   0, 255, 180], [0.769,   0, 255, 255], [0.846,   0, 180, 255],
+  [0.923,   0,   0, 255], [1.000,   0,   0, 180],
+];
+function sap2000Color(t: number): [number, number, number] {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < SAP2000_PALETTE.length - 1; i++) {
+    const [t0, r0, g0, b0] = SAP2000_PALETTE[i];
+    const [t1, r1, g1, b1] = SAP2000_PALETTE[i + 1];
+    if (t <= t1) {
+      const f = (t - t0) / (t1 - t0);
+      return [(r0 + (r1 - r0) * f) / 255, (g0 + (g1 - g0) * f) / 255, (b0 + (b1 - b0) * f) / 255];
+    }
+  }
+  const last = SAP2000_PALETTE[SAP2000_PALETTE.length - 1];
+  return [last[1] / 255, last[2] / 255, last[3] / 255];
+}
+
 export interface DiagramData {
   elemForces: number[][];   // [[fi, fj], ...] per element — values at each end
   type: 'constant' | 'linear';  // constant=N/V (rect), linear=M (trapezoid)
@@ -456,7 +479,7 @@ function addContour(scene: THREE.Scene, nodes: number[][], elements: number[][],
         if (!n) continue;
         pts.push(new THREE.Vector3(n[0], n[1] || 0, n[2] || 0));
         const t = (values[idx - 1] - vMin) / (vMax - vMin);
-        const c = new THREE.Color().setHSL((1 - t) * 0.67, 0.9, 0.5);
+        const [_r, _g, _b] = sap2000Color(t); const c = new THREE.Color(_r, _g, _b);
         cols.push(c.r, c.g, c.b);
       }
       const geo = new THREE.BufferGeometry().setFromPoints(pts);
@@ -471,7 +494,7 @@ function addContour(scene: THREE.Scene, nodes: number[][], elements: number[][],
         if (!n) continue;
         verts.push(n[0], n[1] || 0, n[2] || 0);
         const t = (values[ni] - vMin) / (vMax - vMin);
-        const c = new THREE.Color().setHSL((1 - t) * 0.67, 0.9, 0.5);
+        const [_r, _g, _b] = sap2000Color(t); const c = new THREE.Color(_r, _g, _b);
         cols.push(c.r, c.g, c.b);
       }
       const geo = new THREE.BufferGeometry();
