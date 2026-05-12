@@ -2184,7 +2184,8 @@ export function createEngine() {
     type Stmt = { kind: 'line'; text: string; startLine: number }
       | { kind: 'for'; varName: string; range: string; body: Stmt[]; startLine: number }
       | { kind: 'while'; cond: string; body: Stmt[]; startLine: number }
-      | { kind: 'if'; branches: { cond: string; body: Stmt[] }[]; elseBody?: Stmt[]; startLine: number };
+      | { kind: 'if'; branches: { cond: string; body: Stmt[] }[]; elseBody?: Stmt[]; startLine: number }
+      | { kind: 'try'; tryBody: Stmt[]; catchBody: Stmt[]; startLine: number };
 
     function parseBlocks(lines: { text: string; startLine: number }[]): Stmt[] {
       const stmts: Stmt[] = [];
@@ -2225,6 +2226,33 @@ export function createEngine() {
           const { branches, elseBody, endIdx } = collectIfBranches(lines, i, ifMatch[1]);
           stmts.push({ kind: 'if', branches, elseBody, startLine });
           i = endIdx + 1;
+          continue;
+        }
+
+        // try ... catch ... end  (MATLAB syntax)
+        if (kw === 'try') {
+          i++;
+          const tryLines: { text: string; startLine: number }[] = [];
+          const catchLines: { text: string; startLine: number }[] = [];
+          let inCatch = false;
+          let depth = 1;
+          while (i < lines.length && depth > 0) {
+            const t = stripComment(lines[i].text.trim());
+            if (t.match(/^(for|while|if|try)\b/)) depth++;
+            else if (t === 'end' || t === 'endfunction') {
+              depth--;
+              if (depth === 0) break;
+            }
+            if (depth === 1 && t.match(/^catch\b/)) {
+              inCatch = true;
+              i++;
+              continue;
+            }
+            (inCatch ? catchLines : tryLines).push(lines[i]);
+            i++;
+          }
+          stmts.push({ kind: 'try', tryBody: parseBlocks(tryLines), catchBody: parseBlocks(catchLines), startLine });
+          i++;     // skip the 'end' line
           continue;
         }
 
@@ -3352,6 +3380,22 @@ export function createEngine() {
           }
           if (!executed && stmt.elseBody) {
             execStmts(parseBlocks(stmt.elseBody));
+          }
+        } else if (stmt.kind === 'try') {
+          // MATLAB try/catch/end. Ejecuta tryBody; si lanza error, ejecuta
+          // catchBody. Las senales de control flow (continue/break/return)
+          // se propagan sin ser atrapadas.
+          try {
+            execStmts(stmt.tryBody);
+          } catch (e: any) {
+            if (e === __ContinueSignal || e === __BreakSignal || e === __ReturnSignal) throw e;
+            // Error real: ejecuta el catch body (silenciosamente, sin mostrar el error)
+            try {
+              execStmts(stmt.catchBody);
+            } catch (e2: any) {
+              if (e2 === __ContinueSignal || e2 === __BreakSignal || e2 === __ReturnSignal) throw e2;
+              results.push({ line: stmt.startLine + 1, input: '', type: 'error', error: `catch: ${e2?.message ?? e2}` });
+            }
           }
         }
       }

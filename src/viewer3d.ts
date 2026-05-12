@@ -80,12 +80,21 @@ export function renderStructure(data: StructureViewData, W = 600, H = 450): HTML
   controls.enableDamping = true;
   controls.dampingFactor = 0.1;
 
-  const nodes = data.nodes;
+  // Detectar malla 2D y aplicar swap Y -> Z para que la pared aparezca
+  // VERTICAL en pantalla (no acostada en el piso XY).
+  // En 2D: usuario da [x, y]. En Three.js Z-up el "y" del usuario debe
+  // mapearse a Z para que aparezca vertical. Mismo principio que en
+  // getViewer.ts (show3d viewer).
+  const rawNodes = data.nodes;
   const elements = data.elements;
-  if (!nodes || !elements || nodes.length === 0) {
+  if (!rawNodes || !elements || rawNodes.length === 0) {
     container.innerHTML = '<p style="color:red;padding:20px">Error: nodos o elementos vacíos</p>';
     return container;
   }
+  const is2D = rawNodes.every(n => (n[2] || 0) === 0);
+  const nodes = is2D
+    ? rawNodes.map(n => [n[0], 0, n[1]])
+    : rawNodes;
   const dofPerNode = data.dofPerNode || 3;
 
   // Compute bounds
