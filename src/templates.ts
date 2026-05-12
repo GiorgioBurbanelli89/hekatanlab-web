@@ -488,11 +488,116 @@ disp(K)
 fprintf("max|Ke| = %.3e\\n", max(max(abs(K))))
 
 % --- HEATMAP de la matriz Ke (placa Kirchhoff) ---
-% Estructura de bloques 3x3 por nodo: [w, thx, thy].
-% Notas el patron en bloques?
 idx = 1:12;
 surf(idx, idx, K)
-title("Heatmap Ke - Placa delgada Kirchhoff (12x12)")` },
+title("Heatmap Ke - Placa delgada Kirchhoff (12x12)")
+
+% ═══════════════════════════════════════════════════════════════════
+% DEMO: Placa simply-supported con carga uniforme
+% Malla 3x3 elementos, deflexion w(x,y) con paleta SAP2000
+% ═══════════════════════════════════════════════════════════════════
+nx_m = 3; ny_m = 3;
+W_m = 0.5; H_m = 0.5;        % placa cuadrada
+q = 1000;                      % presion uniforme (N/m^2)
+dx_m = W_m/nx_m; dy_m = H_m/ny_m;
+nj_m = (nx_m+1)*(ny_m+1);
+n_dof = 3;
+n_tot = n_dof*nj_m;
+
+% --- Coordenadas ---
+nds_m = zeros(nj_m, 2);
+for j = 0:ny_m
+  for i = 0:nx_m
+    k = j*(nx_m+1) + i + 1;
+    nds_m(k,1) = i*dx_m;
+    nds_m(k,2) = j*dy_m;
+  end
+end
+
+% --- Conectividad ---
+ne_m = nx_m*ny_m;
+els_m = zeros(ne_m, 4);
+for j = 0:ny_m-1
+  for i = 0:nx_m-1
+    e = j*nx_m + i + 1;
+    bl = j*(nx_m+1) + i + 1;
+    els_m(e,1) = bl;
+    els_m(e,2) = bl + 1;
+    els_m(e,3) = bl + (nx_m+1) + 1;
+    els_m(e,4) = bl + (nx_m+1);
+  end
+end
+
+% --- Rebuild Ke con tamano del elemento de la malla ---
+J11_m = dx_m/2; J22_m = dy_m/2;
+detJ_m = J11_m*J22_m;
+Ke_m = zeros(12, 12);
+for ig = 1:4
+  xi = gpts(ig,1); eta = gpts(ig,2);
+  dNxi  = [-(1-eta)/4,  (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+  dNeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+  dNx_m = dNxi / J11_m;
+  dNy_m = dNeta / J22_m;
+  Bb_m = zeros(3, 12);
+  for i = 1:4
+    Bb_m(1, 3*i)   = dNx_m(i);
+    Bb_m(2, 3*i-1) = -dNy_m(i);
+    Bb_m(3, 3*i-1) = -dNx_m(i);
+    Bb_m(3, 3*i)   = dNy_m(i);
+  end
+  Ke_m = Ke_m + transpose(Bb_m) * Db * Bb_m * detJ_m;
+end
+
+% --- Ensamble global ---
+K_g = zeros(n_tot, n_tot);
+for e = 1:ne_m
+  dofs = zeros(1, 12);
+  for i = 1:4
+    n_id = els_m(e, i);
+    dofs(3*i-2) = 3*n_id - 2;
+    dofs(3*i-1) = 3*n_id - 1;
+    dofs(3*i)   = 3*n_id;
+  end
+  for i = 1:12
+    for j = 1:12
+      K_g(dofs(i), dofs(j)) = K_g(dofs(i), dofs(j)) + Ke_m(i, j);
+    end
+  end
+end
+
+% --- BCs: simply supported en los 4 bordes (w=0) ---
+kp = 1e20;
+for k = 1:nj_m
+  x = nds_m(k,1); y = nds_m(k,2);
+  if abs(x) < 1e-9 || abs(x - W_m) < 1e-9 || abs(y) < 1e-9 || abs(y - H_m) < 1e-9
+    j = 3*k - 2;        % w DOF
+    K_g(j,j) = K_g(j,j) + kp;
+  end
+end
+
+% --- Carga: presion uniforme -> nodal q*Area/4 ---
+F_g = zeros(n_tot, 1);
+load_per_node = q*dx_m*dy_m;
+for k = 1:nj_m
+  F_g(3*k - 2) = F_g(3*k - 2) + load_per_node;  % suma de areas adyacentes (corner=1, edge=2, interior=4 x area/4)
+end
+
+% --- Solve ---
+u_full = inv(K_g) * F_g;
+
+% --- Extraer w ---
+w_disp = zeros(nj_m, 1);
+for k = 1:nj_m
+  w_disp(k) = u_full(3*k - 2);
+end
+
+fprintf("Deflexion max placa Kirchhoff: %.4e m\\n", max(abs(w_disp)))
+
+% --- Mostrar contorno w(x, y) con SAP2000 ---
+try
+  show_contour(nds_m, els_m, w_disp, "w(x,y) — Placa delgada (Kirchhoff)")
+catch
+end` },
 
   { name: 'FE03 — Placa gruesa Q4 (Mindlin-Reissner)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % PLACA GRUESA — Mindlin-Reissner
@@ -585,17 +690,112 @@ idx = 1:12;
 surf(idx, idx, K)
 title("Heatmap Ke - Placa gruesa Mindlin (12x12)")
 
-% --- Malla 2x2 placa Mindlin simplemente apoyada (MATLAB compatible) ---
-disp("--- Malla 2x2 placa Mindlin simplemente apoyada ---")
-nds = [0,0; 0.5,0; 1.0,0; 0,0.5; 0.5,0.5; 1.0,0.5; 0,1.0; 0.5,1.0; 1.0,1.0];
-els = [1,2,5,4; 2,3,6,5; 4,5,8,7; 5,6,9,8];
-scatter(nds(:,1), nds(:,2))
-title("Nodos placa 2x2 - 4 apoyos en esquinas + carga central")
+% ═══════════════════════════════════════════════════════════════════
+% DEMO: Placa Mindlin simply-supported con carga uniforme
+% Selective integration (2x2 bending + 1x1 shear) en cada elemento
+% Malla 3x3, contorno w(x,y) con paleta SAP2000
+% ═══════════════════════════════════════════════════════════════════
+nx_m = 3; ny_m = 3;
+W_m = 1.0; H_m = 1.0;
+q = 1000;
+dx_m = W_m/nx_m; dy_m = H_m/ny_m;
+nj_m = (nx_m+1)*(ny_m+1);
+n_dof = 3;
+n_tot = n_dof*nj_m;
 
-% Nota: en HekatanLab tambien funciona show3d() con BCs y cargas:
-%   sups  = [1, 3, 7, 9];
-%   loads = [5, 0, 0, -1000];
-%   show3d(nds, els, "Placa Mindlin", sups, loads)` },
+% Coords + conectividad
+nds_m = zeros(nj_m, 2);
+for j = 0:ny_m
+  for i = 0:nx_m
+    k = j*(nx_m+1) + i + 1;
+    nds_m(k,1) = i*dx_m;
+    nds_m(k,2) = j*dy_m;
+  end
+end
+ne_m = nx_m*ny_m;
+els_m = zeros(ne_m, 4);
+for j = 0:ny_m-1
+  for i = 0:nx_m-1
+    e = j*nx_m + i + 1;
+    bl = j*(nx_m+1) + i + 1;
+    els_m(e,1) = bl;
+    els_m(e,2) = bl + 1;
+    els_m(e,3) = bl + (nx_m+1) + 1;
+    els_m(e,4) = bl + (nx_m+1);
+  end
+end
+
+% Rebuild Ke con selective integration (bending 2x2 + shear 1x1)
+J11_m = dx_m/2; J22_m = dy_m/2;
+detJ_m = J11_m*J22_m;
+Ke_m = zeros(12, 12);
+% Bending 2x2
+for ig = 1:4
+  xi=gpts(ig,1); eta=gpts(ig,2);
+  dNxi=[-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+  dNeta=[-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+  dNxm = dNxi / J11_m; dNym = dNeta / J22_m;
+  Bb = zeros(3, 12);
+  for i = 1:4
+    Bb(1, 3*i) = dNxm(i);
+    Bb(2, 3*i-1) = -dNym(i);
+    Bb(3, 3*i-1) = -dNxm(i);
+    Bb(3, 3*i) = dNym(i);
+  end
+  Ke_m = Ke_m + transpose(Bb) * Db * Bb * detJ_m;
+end
+% Shear 1x1 (centro, peso 4)
+xi=0; eta=0;
+dNxi=[-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+dNeta=[-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+N = [(1-xi)*(1-eta)/4, (1+xi)*(1-eta)/4, (1+xi)*(1+eta)/4, (1-xi)*(1+eta)/4];
+dNxm = dNxi / J11_m; dNym = dNeta / J22_m;
+Bs = zeros(2, 12);
+for i = 1:4
+  Bs(1, 3*i-2) = dNxm(i);
+  Bs(1, 3*i)   = -N(i);
+  Bs(2, 3*i-2) = dNym(i);
+  Bs(2, 3*i-1) = N(i);
+end
+Ke_m = Ke_m + transpose(Bs) * Ds * Bs * detJ_m * 4;
+
+% Ensamble + BCs simply-supported + carga uniforme
+K_g = zeros(n_tot, n_tot);
+for e = 1:ne_m
+  dofs = zeros(1, 12);
+  for i = 1:4
+    n_id = els_m(e, i);
+    dofs(3*i-2)=3*n_id-2; dofs(3*i-1)=3*n_id-1; dofs(3*i)=3*n_id;
+  end
+  for i = 1:12
+    for j = 1:12
+      K_g(dofs(i),dofs(j)) = K_g(dofs(i),dofs(j)) + Ke_m(i,j);
+    end
+  end
+end
+kp = 1e20;
+for k = 1:nj_m
+  x = nds_m(k,1); y = nds_m(k,2);
+  if abs(x)<1e-9 || abs(x-W_m)<1e-9 || abs(y)<1e-9 || abs(y-H_m)<1e-9
+    K_g(3*k-2, 3*k-2) = K_g(3*k-2, 3*k-2) + kp;
+  end
+end
+F_g = zeros(n_tot, 1);
+load_per_node = q*dx_m*dy_m;
+for k = 1:nj_m
+  F_g(3*k - 2) = F_g(3*k - 2) + load_per_node;
+end
+u_full = inv(K_g) * F_g;
+w_disp = zeros(nj_m, 1);
+for k = 1:nj_m
+  w_disp(k) = u_full(3*k - 2);
+end
+fprintf("Deflexion max placa Mindlin: %.4e m\\n", max(abs(w_disp)))
+
+try
+  show_contour(nds_m, els_m, w_disp, "w(x,y) — Placa gruesa (Mindlin)")
+catch
+end` },
 
   { name: 'FE04 — Placa Laminada (composite ABD)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % PLACA LAMINADA (LAYERED COMPOSITE)
@@ -745,7 +945,107 @@ fprintf("Bending esta en DOFs (3,4,5; 8,9,10; 13,14,15; 18,19,20)\\n")
 % Estan acoplados via los DOFs locales (entrelazados de 5 en 5)
 idx = 1:20;
 surf(idx, idx, K)
-title("Heatmap Ke - Shell Thin (20x20, membrana + Kirchhoff)")` },
+title("Heatmap Ke - Shell Thin (20x20, membrana + Kirchhoff)")
+
+% ═══════════════════════════════════════════════════════════════════
+% DEMO: Cantilever shell con carga lateral
+% Combina membrana + Kirchhoff, contorno de desplazamiento total
+% ═══════════════════════════════════════════════════════════════════
+nx_m = 3; ny_m = 3;
+W_m = 0.5; H_m = 0.5;
+P_m = 100;
+dx_m = W_m/nx_m; dy_m = H_m/ny_m;
+nj_m = (nx_m+1)*(ny_m+1);
+n_dof = 5;     % u, v, w, thx, thy
+n_tot = n_dof*nj_m;
+
+nds_m = zeros(nj_m, 2);
+for j = 0:ny_m
+  for i = 0:nx_m
+    k = j*(nx_m+1) + i + 1;
+    nds_m(k,1) = i*dx_m;
+    nds_m(k,2) = j*dy_m;
+  end
+end
+ne_m = nx_m*ny_m;
+els_m = zeros(ne_m, 4);
+for j = 0:ny_m-1
+  for i = 0:nx_m-1
+    e = j*nx_m + i + 1;
+    bl = j*(nx_m+1) + i + 1;
+    els_m(e,1)=bl; els_m(e,2)=bl+1; els_m(e,3)=bl+(nx_m+1)+1; els_m(e,4)=bl+(nx_m+1);
+  end
+end
+
+% Rebuild Ke shell thin con el tamano de elemento de la malla
+J11_m = dx_m/2; J22_m = dy_m/2;
+detJ_m = J11_m*J22_m;
+Ke_m = zeros(20, 20);
+for ig = 1:4
+  xi=gpts(ig,1); eta=gpts(ig,2);
+  dNxi=[-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+  dNeta=[-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+  dNxm = dNxi/J11_m; dNym = dNeta/J22_m;
+  B = zeros(6, 20);
+  for i = 1:4
+    B(1, 5*i-4)=dNxm(i); B(2, 5*i-3)=dNym(i);
+    B(3, 5*i-4)=dNym(i); B(3, 5*i-3)=dNxm(i);
+    B(4, 5*i)=dNxm(i); B(5, 5*i-1)=-dNym(i);
+    B(6, 5*i-1)=-dNxm(i); B(6, 5*i)=dNym(i);
+  end
+  D6 = zeros(6, 6);
+  D6(1:3,1:3) = Dm*t; D6(4:6,4:6) = Db;
+  Ke_m = Ke_m + transpose(B) * D6 * B * detJ_m;
+end
+
+% Ensamble
+K_g = zeros(n_tot, n_tot);
+for e = 1:ne_m
+  dofs = zeros(1, 20);
+  for i = 1:4
+    n_id = els_m(e, i);
+    for k = 1:5
+      dofs(5*(i-1)+k) = 5*(n_id-1) + k;
+    end
+  end
+  for i = 1:20
+    for j = 1:20
+      K_g(dofs(i),dofs(j)) = K_g(dofs(i),dofs(j)) + Ke_m(i,j);
+    end
+  end
+end
+
+% BCs: empotrado en x=0
+kp = 1e20;
+for k = 1:nj_m
+  if abs(nds_m(k,1)) < 1e-9
+    for d = 1:5
+      K_g(5*(k-1)+d, 5*(k-1)+d) = K_g(5*(k-1)+d, 5*(k-1)+d) + kp;
+    end
+  end
+end
+
+% Carga lateral P en borde x=W_m, en direccion u
+F_g = zeros(n_tot, 1);
+P_per = P_m/(ny_m+1);
+for k = 1:nj_m
+  if abs(nds_m(k,1) - W_m) < 1e-9
+    F_g(5*(k-1) + 1) = P_per;
+  end
+end
+
+u_full = inv(K_g) * F_g;
+u_disp = zeros(nj_m, 1);
+for k = 1:nj_m
+  u_disp(k) = u_full(5*(k-1) + 1);    % desplazamiento u
+end
+
+fprintf("Desplazamiento horizontal max shell thin: %.4e\\n", max(abs(u_disp)))
+
+try
+  show_contour(nds_m, els_m, u_disp, "u(x,y) — Shell Thin cantilever")
+catch
+end` },
 
   { name: 'FE06 — Shell Thick (Membrana + Mindlin)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % SHELL GRUESO (THICK SHELL)
@@ -840,7 +1140,116 @@ fprintf("max|Ke| = %.3e\\n", max(max(abs(K))))
 % bloques de (w, thx, thy) que el shell thin.
 idx = 1:20;
 surf(idx, idx, K)
-title("Heatmap Ke - Shell Thick (20x20, membrana + Mindlin)")` },
+title("Heatmap Ke - Shell Thick (20x20, membrana + Mindlin)")
+
+% ═══════════════════════════════════════════════════════════════════
+% DEMO: Cantilever shell thick con carga lateral
+% Selective integration (2x2 membrana+bending, 1x1 shear)
+% Contorno de u(x,y) con paleta SAP2000
+% ═══════════════════════════════════════════════════════════════════
+nx_m = 3; ny_m = 3;
+W_m = 0.5; H_m = 0.5;
+P_m = 100;
+dx_m = W_m/nx_m; dy_m = H_m/ny_m;
+nj_m = (nx_m+1)*(ny_m+1);
+n_dof = 5;
+n_tot = n_dof*nj_m;
+
+nds_m = zeros(nj_m, 2);
+for j = 0:ny_m
+  for i = 0:nx_m
+    k = j*(nx_m+1) + i + 1;
+    nds_m(k,1) = i*dx_m;
+    nds_m(k,2) = j*dy_m;
+  end
+end
+ne_m = nx_m*ny_m;
+els_m = zeros(ne_m, 4);
+for j = 0:ny_m-1
+  for i = 0:nx_m-1
+    e = j*nx_m + i + 1;
+    bl = j*(nx_m+1) + i + 1;
+    els_m(e,1)=bl; els_m(e,2)=bl+1; els_m(e,3)=bl+(nx_m+1)+1; els_m(e,4)=bl+(nx_m+1);
+  end
+end
+
+J11_m = dx_m/2; J22_m = dy_m/2;
+detJ_m = J11_m*J22_m;
+Ke_m = zeros(20, 20);
+
+% Membrana + Bending 2x2
+for ig = 1:4
+  xi=gpts(ig,1); eta=gpts(ig,2);
+  dNxi=[-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+  dNeta=[-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+  dNxm=dNxi/J11_m; dNym=dNeta/J22_m;
+  Bmb = zeros(6, 20);
+  for i = 1:4
+    Bmb(1, 5*i-4)=dNxm(i); Bmb(2, 5*i-3)=dNym(i);
+    Bmb(3, 5*i-4)=dNym(i); Bmb(3, 5*i-3)=dNxm(i);
+    Bmb(4, 5*i)=dNxm(i); Bmb(5, 5*i-1)=-dNym(i);
+    Bmb(6, 5*i-1)=-dNxm(i); Bmb(6, 5*i)=dNym(i);
+  end
+  D6 = zeros(6, 6);
+  D6(1:3,1:3) = Dm*t; D6(4:6,4:6) = Db;
+  Ke_m = Ke_m + transpose(Bmb) * D6 * Bmb * detJ_m;
+end
+
+% Shear 1x1 (reducida — evita locking)
+xi=0; eta=0;
+dNxi=[-(1-eta)/4, (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+dNeta=[-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+N = [(1-xi)*(1-eta)/4, (1+xi)*(1-eta)/4, (1+xi)*(1+eta)/4, (1-xi)*(1+eta)/4];
+dNxm=dNxi/J11_m; dNym=dNeta/J22_m;
+Bs = zeros(2, 20);
+for i = 1:4
+  Bs(1, 5*i-2)=dNxm(i); Bs(1, 5*i)=-N(i);
+  Bs(2, 5*i-2)=dNym(i); Bs(2, 5*i-1)=N(i);
+end
+Ke_m = Ke_m + transpose(Bs) * Ds * Bs * detJ_m * 4;
+
+% Ensamble + BCs + Carga
+K_g = zeros(n_tot, n_tot);
+for e = 1:ne_m
+  dofs = zeros(1, 20);
+  for i = 1:4
+    n_id = els_m(e, i);
+    for k = 1:5
+      dofs(5*(i-1)+k) = 5*(n_id-1) + k;
+    end
+  end
+  for i = 1:20
+    for j = 1:20
+      K_g(dofs(i),dofs(j)) = K_g(dofs(i),dofs(j)) + Ke_m(i,j);
+    end
+  end
+end
+kp = 1e20;
+for k = 1:nj_m
+  if abs(nds_m(k,1)) < 1e-9
+    for d = 1:5
+      K_g(5*(k-1)+d, 5*(k-1)+d) = K_g(5*(k-1)+d, 5*(k-1)+d) + kp;
+    end
+  end
+end
+F_g = zeros(n_tot, 1);
+P_per = P_m/(ny_m+1);
+for k = 1:nj_m
+  if abs(nds_m(k,1) - W_m) < 1e-9
+    F_g(5*(k-1) + 1) = P_per;
+  end
+end
+u_full = inv(K_g) * F_g;
+u_disp = zeros(nj_m, 1);
+for k = 1:nj_m
+  u_disp(k) = u_full(5*(k-1) + 1);
+end
+fprintf("Desplazamiento horizontal max shell thick: %.4e\\n", max(abs(u_disp)))
+
+try
+  show_contour(nds_m, els_m, u_disp, "u(x,y) — Shell Thick cantilever")
+catch
+end` },
 
   { name: 'FE07 — Shell Thin + Frame (combinado)', category: 'FEM Elementos', mode: 'matlab', code: `% ═══════════════════════════════════════════
 % SHELL THIN + FRAME (combinacion)
