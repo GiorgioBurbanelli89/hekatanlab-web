@@ -201,37 +201,49 @@ disp(" Si jit >> compile+parse el JIT esta trabajando bien.")` },
 % Si algo no se ve, esa funcion no esta soportada
 % ═══════════════════════════════════════════
 
+% IMPORTANTE: 'figure' antes de cada plot crea VENTANA NUEVA en MATLAB.
+% Sin esto, MATLAB sobreescribe la figura previa y solo veras la ultima.
+% En HekatanLab cada plot se agrega como canvas nuevo automaticamente.
+
 % 1) plot(x, y, title) - linea 2D
+figure
 x = 0:0.1:2*pi;
 y = sin(x);
 plot(x, y, "plot: y = sin(x)")
 
 % 2) scatter(x, y, title) - puntos dispersos
+figure
 xs = [1, 2, 3, 4, 5, 6, 7, 8];
 ys = [2.1, 3.9, 6.2, 7.8, 10.1, 12.3, 13.9, 16.2];
 scatter(xs, ys, "scatter: datos experimentales")
 
 % 3) bar(x, y, title) - grafico de barras
+figure
 cat = 1:5;
 val = [23, 45, 12, 67, 34];
 bar(cat, val, "bar: ventas por region")
 
 % 4) stem(x, y, title) - impulsos
+figure
 n = 0:20;
 amort = sin(n) .* exp(-n/5);
 stem(n, amort, "stem: senal amortiguada")
 
 % 5) fplot(expr, [a, b], title) - graficar expresion
+figure
 fplot("x^3 - 3*x^2 + 2", [-2, 4], "fplot: x^3 - 3x^2 + 2")
+figure
 fplot("sin(x) * cos(2*x)", [0, 6.28], "fplot: sin(x)*cos(2x)")
 
 % 6) plot3(x, y, z, title) - curva 3D
+figure
 t = 0:0.1:6*pi;
 xh = cos(t);
 yh = sin(t);
 plot3(xh, yh, t, "plot3: helice 3D")
 
 % 7) surf(x, y, Z, title) - superficie
+figure
 xg = -4:0.5:4;
 yg = -4:0.5:4;
 Z = meshz(xg, yg, "sin(sqrt(x^2+y^2+0.01))/sqrt(x^2+y^2+0.01)");
@@ -239,6 +251,7 @@ surf(xg, yg, Z)
 title("surf: sombrero mexicano")
 
 % 8) hist(data, bins, title) - histograma
+figure
 datos = randn(1, 500);
 hist(datos, 20, "hist: distribucion normal")
 
@@ -400,16 +413,19 @@ end
 xc = 0:dx:W;
 yc = 0:dy:H;
 
-% surf con view(2) + shading interp = contorno 2D estilo MATLAB
+% surf con view(2) + shading("interp") = contorno 2D estilo MATLAB
 % (en HekatanLab usa la paleta SAP2000 - igual a Hekatan Struct)
+% IMPORTANTE: 'figure' antes de cada plot crea VENTANA NUEVA en MATLAB,
+% sino el segundo plot SOBREESCRIBE al primero (y solo verias v(x,y)).
+figure
 surf(xc, yc, U_grid)
 view(2)
-shading interp
+shading("interp")
 colorbar
 title("Desplazamiento horizontal u(x,y)")
 xlabel("x [m]")
 ylabel("y [m]")
-axis equal
+axis("equal")
 
 % --- VISUALIZACION 2: contorno de v(x, y) ---
 V_grid = zeros(ny1, nx1);
@@ -420,14 +436,15 @@ for j = 1:ny1
   end
 end
 
+figure        % <-- Figure 2 (nueva ventana en MATLAB)
 surf(xc, yc, V_grid)
 view(2)
-shading interp
+shading("interp")
 colorbar
 title("Desplazamiento vertical v(x,y)")
 xlabel("x [m]")
 ylabel("y [m]")
-axis equal
+axis("equal")
 
 % --- VISUALIZACION 3 (solo HekatanLab): contorno FEM real sobre la malla ---
 % show_contour(nodes, elements, values, title) usa la paleta SAP2000
@@ -519,6 +536,8 @@ fprintf("Simetria: max|K-K'| = %.2e\\n", max(max(abs(K - transpose(K)))))
 %  - Simetria (espejo respecto a la diagonal)
 %  - Valores grandes concentrados en la diagonal
 %  - Pares (u, v) por nodo (estructura de bloque 2x2)
+% 'figure' fuerza una ventana nueva en MATLAB (sino sobreescribe).
+figure
 idx = 1:8;
 surf(idx, idx, K)
 title("Heatmap matriz Ke - Membrana Q4 (8x8)")
@@ -528,7 +547,8 @@ disp("--- Malla mini: 2x2 elementos ---")
 nds = [0,0; 0.25,0; 0.5,0; 0,0.25; 0.25,0.25; 0.5,0.25; 0,0.5; 0.25,0.5; 0.5,0.5];
 els = [1,2,5,4; 2,3,6,5; 4,5,8,7; 5,6,9,8];
 
-% Visualizar nodos (MATLAB compatible)
+% Visualizar nodos (MATLAB compatible) — segunda figura
+figure
 scatter(nds(:,1), nds(:,2))
 title("Nodos de la malla 2x2 Q4 (cantilever empotrado en x=0)")
 
