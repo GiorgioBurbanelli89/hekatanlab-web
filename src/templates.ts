@@ -22,62 +22,174 @@ export const TEMPLATES: Template[] = [
   // BENCHMARK — Mide velocidad del JIT
   // ═════════════════════════════════════════════════
 
-  { name: 'B00 — Benchmark JIT (loop FEM)', category: 'Benchmark', mode: 'matlab', code: `% ═══════════════════════════════════════════
-% Benchmark del JIT en HekatanLab
-% Mide tiempo de un loop FEM tipico (Q4 membrana, 8x8 K matrix)
-% repetido N veces. Compara con el mismo loop deshabilitando el JIT.
+  { name: 'B01 — Benchmark FEM completo', category: 'Benchmark', mode: 'matlab', code: `% ═══════════════════════════════════════════
+% Benchmark FEM COMPLETO en HekatanLab
+% Mide tiempo de UN CICLO FEM entero (ensamble + BCs + solve + extract).
+% Repite N veces para amplificar tiempo y promediar.
+%
+% Tamano del problema:
+%   - 6 x 4 elementos = 24 elementos Q4 plane stress
+%   - 35 nodos x 2 DOFs = 70 DOFs globales
+%   - K global 70 x 70
+% Este es un FEM educational pero realista.
 % ═══════════════════════════════════════════
 
-% Datos elemento
-E = 30000; nu = 0.2; t = 0.2;
-coords = [-0.25, -0.25; 0.25, -0.25; 0.25, 0.25; -0.25, 0.25];
-D = (E/(1-nu^2)) * [1, nu, 0; nu, 1, 0; 0, 0, (1-nu)/2];
-g = 1/sqrt(3);
-gpts = [-g,-g; g,-g; g,g; -g,g];
+% --- DATOS (fijos, fuera del timer) ---
+E_e = 30000; nu_e = 0.2; t_e = 0.2;
+W_e = 3; H_e = 2; P_e = 100;
+nx_e = 6; ny_e = 4;
+N_FEM_RUNS = 10;        % numero de FEMs completos a medir
 
-% Cuantas veces re-computamos el K (para amplificar el tiempo)
-N_runs = 200;
+% Pre-computar todo lo independiente del solve
+n_dof = 2;
+ne = nx_e*ny_e;
+nj = (nx_e+1)*(ny_e+1);
+n_tot = n_dof*nj;
+dx_e = W_e/nx_e;
+dy_e = H_e/ny_e;
+
+% Mesh (fijo)
+nds = zeros(nj, 2);
+for j = 0:ny_e
+  for i = 0:nx_e
+    k = j*(nx_e+1) + i + 1;
+    nds(k,1) = i*dx_e;
+    nds(k,2) = j*dy_e;
+  end
+end
+els = zeros(ne, 4);
+for j = 0:ny_e-1
+  for i = 0:nx_e-1
+    e = j*nx_e + i + 1;
+    bl = j*(nx_e+1) + i + 1;
+    els(e,1)=bl; els(e,2)=bl+1; els(e,3)=bl+(nx_e+1)+1; els(e,4)=bl+(nx_e+1);
+  end
+end
+
+% Ke de un elemento (constante para malla regular)
+D_e = (E_e/(1-nu_e^2)) * [1, nu_e, 0; nu_e, 1, 0; 0, 0, (1-nu_e)/2];
+J11_e = dx_e/2; J22_e = dy_e/2;
+detJ_e = J11_e*J22_e;
+g_e = 1/sqrt(3);
+gpts_e = [-g_e,-g_e; g_e,-g_e; g_e,g_e; -g_e,g_e];
+Ke_pre = zeros(8, 8);
+for ig = 1:4
+  xi = gpts_e(ig,1); eta = gpts_e(ig,2);
+  dNxi  = [-(1-eta)/4,  (1-eta)/4, (1+eta)/4, -(1+eta)/4];
+  dNeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
+  dNx_e = dNxi / J11_e;
+  dNy_e = dNeta / J22_e;
+  B_e = zeros(3, 8);
+  for i = 1:4
+    B_e(1, 2*i-1) = dNx_e(i);
+    B_e(2, 2*i)   = dNy_e(i);
+    B_e(3, 2*i-1) = dNy_e(i);
+    B_e(3, 2*i)   = dNx_e(i);
+  end
+  Ke_pre = Ke_pre + transpose(B_e) * D_e * B_e * t_e * detJ_e;
+end
+
+disp("Setup completo:")
+fprintf("  Malla %dx%d = %d elementos, %d nodos, %d DOFs\\n", nx_e, ny_e, ne, nj, n_tot)
+fprintf("  N_FEM_RUNS = %d\\n", N_FEM_RUNS)
+disp(" ")
+disp("Iniciando benchmark...")
+
+% --- LOOP DE BENCHMARK: 10 FEMs completos ---
+tic
+for run = 1:N_FEM_RUNS
+  % 1. Ensamble global de K
+  K_g = zeros(n_tot, n_tot);
+  for e = 1:ne
+    dofs = zeros(1, 8);
+    for i = 1:4
+      n_id = els(e, i);
+      dofs(2*i-1) = 2*n_id - 1;
+      dofs(2*i)   = 2*n_id;
+    end
+    for i = 1:8
+      for j = 1:8
+        K_g(dofs(i), dofs(j)) = K_g(dofs(i), dofs(j)) + Ke_pre(i, j);
+      end
+    end
+  end
+
+  % 2. BCs: penalty en base (y=0)
+  kp = 1e20;
+  for i = 1:(nx_e+1)
+    K_g(2*i-1, 2*i-1) = K_g(2*i-1, 2*i-1) + kp;
+    K_g(2*i, 2*i) = K_g(2*i, 2*i) + kp;
+  end
+
+  % 3. Carga lateral repartida en top
+  F_g = zeros(n_tot, 1);
+  p_node = P_e/(nx_e+1);
+  for i = 1:(nx_e+1)
+    j_top = ny_e*(nx_e+1) + i;
+    F_g(2*j_top - 1) = p_node;
+  end
+
+  % 4. Solve
+  u_full = inv(K_g) * F_g;
+
+  % 5. Extract max displacement
+  u_max_run = 0;
+  for k = 1:nj
+    if abs(u_full(2*k-1)) > abs(u_max_run)
+      u_max_run = u_full(2*k-1);
+    end
+  end
+end
+t_total = toc;
+
+fprintf("\\nResultado:\\n")
+fprintf("  Tiempo total: %.3f s\\n", t_total)
+fprintf("  Por FEM:      %.1f ms\\n", t_total*1000/N_FEM_RUNS)
+fprintf("  u_max (ultimo run): %.4e m\\n", u_max_run)
+
+disp(" ")
+disp("Stats del JIT en consola del navegador (F12):")
+disp("   __hekatanJitStats()")
+disp(" Si 'jit' >> 'compile + parse' -> JIT trabajando bien.")
+disp(" Para desactivar JIT: globalThis.__hekatanDisableJit = true")` },
+
+  { name: 'B00 — Benchmark JIT (loop simple)', category: 'Benchmark', mode: 'matlab', code: `% ═══════════════════════════════════════════
+% Benchmark del JIT en HekatanLab
+% Mide tiempo de un loop ARITMETICO SIMPLE (no FEM).
+% El JIT compila a JS nativo via new Function() — V8 lo optimiza a
+% codigo nativo de procesador, ~50-100x mas rapido que el interpreter.
+% ═══════════════════════════════════════════
+
+% Loop simple: suma de cuadrados - sin(i)*cos(i) repetido N veces
+N = 100000;
 
 % --- TEST con JIT habilitado (default) ---
 tic
-for run = 1:N_runs
-  K = zeros(8, 8);
-  for ig = 1:4
-    xi = gpts(ig, 1); eta = gpts(ig, 2);
-    dNxi  = [-(1-eta)/4,  (1-eta)/4, (1+eta)/4, -(1+eta)/4];
-    dNeta = [-(1-xi)/4, -(1+xi)/4, (1+xi)/4, (1-xi)/4];
-    J = zeros(2, 2);
-    for i = 1:4
-      J(1,1) = J(1,1) + dNxi(i)*coords(i,1);
-      J(1,2) = J(1,2) + dNxi(i)*coords(i,2);
-      J(2,1) = J(2,1) + dNeta(i)*coords(i,1);
-      J(2,2) = J(2,2) + dNeta(i)*coords(i,2);
-    end
-    detJ = J(1,1)*J(2,2) - J(1,2)*J(2,1);
-    invJ = (1/detJ) * [J(2,2), -J(1,2); -J(2,1), J(1,1)];
-    dNx = invJ(1,1)*dNxi + invJ(1,2)*dNeta;
-    dNy = invJ(2,1)*dNxi + invJ(2,2)*dNeta;
-    B = zeros(3, 8);
-    for i = 1:4
-      B(1, 2*i-1) = dNx(i);
-      B(2, 2*i)   = dNy(i);
-      B(3, 2*i-1) = dNy(i);
-      B(3, 2*i)   = dNx(i);
-    end
-    K = K + transpose(B) * D * B * t * abs(detJ);
-  end
+s = 0;
+for i = 1:N
+  s = s + i^2 - sin(i)*cos(i);
 end
 t_jit = toc;
-fprintf("CON JIT:    %d runs en %.3f s -> %.1f us/run\\n", N_runs, t_jit, t_jit*1e6/N_runs)
+fprintf("CON JIT:    %d iter en %.3f s -> %.2f ns/iter\\n", N, t_jit, t_jit*1e9/N)
 
-% --- Reportar stats del JIT (cuantos statements se ejecutaron por tier) ---
-% Stats expuestos en __hekatanJitStats (en consola del navegador)
-disp("(stats del JIT en consola: __hekatanJitStats())")
+% Verificacion del resultado
+disp("Suma final s:")
+disp(s)
 
-% Verificacion final: K final
-disp("K(1,1) final:")
-disp(K(1,1))
-fprintf("Esperado para 0.5x0.5x0.2 elem: ~2916.67\\n")` },
+% --- Comparacion sin JIT (deshabilitamos via toggle) ---
+% El toggle __hekatanDisableJit existe en globalThis. Si lo activamos,
+% el motor cae al tier 2 (compile-cache) que es ~10-30x mas lento.
+disp(" ")
+disp("(Para comparar SIN JIT, en consola del navegador (F12):")
+disp("   globalThis.__hekatanDisableJit = true")
+disp(" y volver a correr este template.")
+disp(" Luego reset: globalThis.__hekatanDisableJit = false)")
+
+% Stats por tier (jit / compile / parse)
+disp(" ")
+disp("Stats por tier (jit/compile/parse) en consola:")
+disp("   __hekatanJitStats()")
+disp(" Si jit >> compile+parse el JIT esta trabajando bien.")` },
 
   // ═════════════════════════════════════════════════
   // GRAPHICS — Test rapido de todas las gráficas MATLAB
