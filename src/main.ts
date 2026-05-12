@@ -1,4 +1,7 @@
 import './styles.css';
+// KaTeX CSS bundleado localmente — antes se cargaba desde cdn.jsdelivr.net
+// pero el Tracking Prevention de los navegadores bloqueaba el storage del CDN.
+import 'katex/dist/katex.min.css';
 import { createEngine, loadFunctions, addFunction, removeFunction } from './engine';
 import { renderOutput } from './renderer';
 import { TEMPLATES } from './templates';
@@ -13,11 +16,28 @@ import { initTriangle } from './wasm/triangleMesh';
 initTriangle().catch(e => console.warn('Triangle WASM load failed:', e));
 
 // ── Build UI ──
-const categories = [...new Set(TEMPLATES.map(t => t.category))];
-const templateOptions = categories.map(cat => {
-  const items = TEMPLATES.filter(t => t.category === cat);
-  return `<optgroup label="${cat}">${items.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}</optgroup>`;
-}).join('');
+// Filtrar templates por modo activo.
+// Default: un template SIN `mode` se considera del modo Hékatan Lab (LaTeX, autorun).
+// Para que aparezca en ambos modos hay que poner `mode: 'both'` explícitamente.
+// Los nuevos ejemplos `MATLAB Clásico` llevan `mode: 'matlab'`.
+function templatesForMode(m: 'hekatan-lab' | 'matlab') {
+  return TEMPLATES.filter(t => {
+    const mode = t.mode ?? 'hekatan-lab';
+    return mode === 'both' || mode === m;
+  });
+}
+function buildTemplateOptions(m: 'hekatan-lab' | 'matlab'): string {
+  const visible = templatesForMode(m);
+  const cats = [...new Set(visible.map(t => t.category))];
+  return cats.map(cat => {
+    const items = visible.filter(t => t.category === cat);
+    return `<optgroup label="${cat}">${items.map(t => `<option value="${t.name}">${t.name}</option>`).join('')}</optgroup>`;
+  }).join('');
+}
+// Modo persistido (mismo key que aplicaremos abajo en applyMode)
+const initialMode: 'hekatan-lab' | 'matlab' =
+  ((localStorage.getItem('hekatanlab-mode') as any) === 'matlab') ? 'matlab' : 'hekatan-lab';
+const templateOptions = buildTemplateOptions(initialMode);
 
 document.body.innerHTML = `
 <div id="header">
@@ -26,9 +46,16 @@ document.body.innerHTML = `
   <div class="spacer"></div>
   <button class="primary" id="btn-run">▶ Ejecutar</button>
   <button id="btn-clear">Limpiar</button>
+  <div id="mode-switch" class="mode-switch" title="Cambiar modo de ejecución">
+    <button id="mode-hekatan" class="mode-btn active" data-mode="hekatan-lab" title="Modo permisivo: autorun, asignaciones se muestran con LaTeX automáticamente">🧪 Hékatan Lab</button>
+    <button id="mode-matlab" class="mode-btn" data-mode="matlab" title="Modo estricto MATLAB: solo disp/fprintf/printf muestran salida; sin autorun">📐 MATLAB</button>
+  </div>
   <select id="template-select">
     <option value="">📂 Ejemplos</option>
     ${templateOptions}
+  </select>
+  <select id="cpd-select" title="Cargar ejemplos de Calcpad-Symbolic">
+    <option value="">📚 Calcpad (390+)</option>
   </select>
   <button id="btn-import" title="Importar S2K/E2K">📁 Import</button>
   <button id="btn-export" title="Exportar S2K/E2K">💾 Export</button>
@@ -93,13 +120,48 @@ editor.addEventListener('keydown', (e) => {
   }
 });
 
+// ── Modo (Hékatan Lab vs MATLAB estricto) ──
+type Mode = 'hekatan-lab' | 'matlab';
+let currentMode: Mode = (localStorage.getItem('hekatanlab-mode') as Mode) || 'hekatan-lab';
+function applyMode(m: Mode) {
+  currentMode = m;
+  localStorage.setItem('hekatanlab-mode', m);
+  engine.setMode(m);
+  // Resaltar botón activo
+  document.querySelectorAll<HTMLElement>('.mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === m);
+  });
+  // En modo MATLAB no hay autorun (igual al MATLAB local: hay que pulsar Ejecutar)
+  // y se actualiza el header del editor.
+  const isMatlab = m === 'matlab';
+  if (isMatlab) autorunEnabled = false;
+  document.body.classList.toggle('mode-matlab', isMatlab);
+  const autoBtn = document.getElementById('btn-autorun')!;
+  autoBtn.classList.toggle('active', autorunEnabled);
+  autoBtn.style.display = isMatlab ? 'none' : '';
+  const editorHeader = document.getElementById('editor-header');
+  if (editorHeader) editorHeader.textContent = isMatlab ? 'EDITOR — MATLAB (estricto, pulsa ▶ Ejecutar)' : 'EDITOR — MATLAB/Octave (autorun)';
+  // Reconstruir el dropdown de Ejemplos para mostrar solo los del modo activo
+  const sel = document.getElementById('template-select') as HTMLSelectElement | null;
+  if (sel) {
+    const placeholder = `<option value="">📂 Ejemplos${isMatlab ? ' (MATLAB)' : ''}</option>`;
+    sel.innerHTML = placeholder + buildTemplateOptions(m);
+  }
+  // Re-render con el nuevo modo si ya hay output
+  if (lastResults) renderOutput(output, lastResults, editor, { mode: currentMode });
+}
+
 // Autorun (toggleable)
 let autorunEnabled = true;
 let timer: number | null = null;
+let suppressAutorun = false; // suppress during programmatic text changes
+let lastResults: any = null;
 editor.addEventListener('input', () => {
-  if (!autorunEnabled) return;
+  if (!autorunEnabled || suppressAutorun) return;
   if (timer) clearTimeout(timer);
-  timer = window.setTimeout(run, 400);
+  // Longer delay for getMesh (async WASM) to avoid race conditions
+  const delay = editor.value.includes('getMesh') ? 1000 : 400;
+  timer = window.setTimeout(run, delay);
 });
 
 document.getElementById('btn-autorun')!.addEventListener('click', () => {
@@ -109,12 +171,21 @@ document.getElementById('btn-autorun')!.addEventListener('click', () => {
   btn.title = autorunEnabled ? 'Autorun ON' : 'Autorun OFF';
 });
 
+// Botones de modo
+document.querySelectorAll<HTMLElement>('.mode-btn').forEach(b => {
+  b.addEventListener('click', () => applyMode(b.dataset.mode as Mode));
+});
+
+let runId = 0; // guard against concurrent runs
 async function run() {
+  const myId = ++runId;
   const code = editor.value;
   const t0 = performance.now();
   const results = await engine.evaluate(code);
+  if (myId !== runId) return; // stale run — newer one started
   const dt = (performance.now() - t0).toFixed(0);
-  renderOutput(output, results, editor);
+  lastResults = results;
+  renderOutput(output, results, editor, { mode: currentMode });
   (document.getElementById('status-lines')!).textContent = `${code.split('\n').length} líneas`;
   (document.getElementById('status-time')!).textContent = `${dt}ms`;
   (document.getElementById('status-vars')!).textContent = `${results.filter(r => r.type === 'assign').length} vars`;
@@ -123,11 +194,25 @@ async function run() {
 document.getElementById('btn-run')!.addEventListener('click', run);
 document.getElementById('btn-clear')!.addEventListener('click', () => { setEditorText(''); output.innerHTML = ''; engine.reset(); });
 
-// Templates
+// Aplicar modo persistido (después de wirear botones y engine)
+applyMode(currentMode);
+
+// Templates — al seleccionar, solo carga el codigo en el editor.
+// El usuario presiona "Ejecutar" cuando quiere correr (igual que MATLAB).
+// Esto evita el lag de auto-run en templates pesados como FEM completo.
 document.getElementById('template-select')!.addEventListener('change', (e) => {
   const sel = e.target as HTMLSelectElement;
   const t = TEMPLATES.find(x => x.name === sel.value);
-  if (t) { setEditorText(t.code); run(); }
+  if (t) {
+    if (timer) clearTimeout(timer);
+    suppressAutorun = true;
+    setEditorText(t.code);
+    suppressAutorun = false;
+    // Limpiar output anterior para que no confunda con el template nuevo
+    output.innerHTML = '<div style="padding:1em;opacity:0.6;font-style:italic">' +
+      'Codigo cargado. Presiona "Ejecutar" para correr el template.' +
+      '</div>';
+  }
 });
 
 // Theme
@@ -247,6 +332,10 @@ document.getElementById('funcs-save')!.addEventListener('click', () => {
   if (c) { buildFuncsList(); } else { alert('No se encontraron funciones en el editor'); }
 });
 
+// Exposición para testing (window.__hekatan_importE2k(text) → string MATLAB)
+(window as any).__hekatan_importE2k = (text: string) => e2kToMatlab(parseE2k(text));
+(window as any).__hekatan_parseE2k = parseE2k;
+
 // ── Import S2K/E2K ──
 document.getElementById('btn-import')!.addEventListener('click', () => {
   const input = document.createElement('input');
@@ -361,3 +450,85 @@ document.getElementById('btn-help')!.addEventListener('click', () => {
 // Default
 const def = TEMPLATES.find(t => t.name === 'Operaciones básicas');
 if (def) { setEditorText(def.code); run(); }
+
+// === Carga de ejemplos Calcpad (390+) ===
+type CpdIndex = { groups: Record<string, { path: string; name: string }[]>; total: number };
+
+async function loadCpdIndex(): Promise<void> {
+  try {
+    const baseUrl = (import.meta as any).env?.BASE_URL || '/';
+    const res = await fetch(baseUrl + 'calcpad-examples/index.json');
+    if (!res.ok) {
+      // 404/500 — endpoint no existe en este deploy. No es un error.
+      return;
+    }
+    // Verificar Content-Type: si el archivo no existe, Vite/SPA-fallback devuelve
+    // index.html con 200 OK pero Content-Type text/html → res.json() fallaría con
+    // "Unexpected token '<'". Detectamos eso explícitamente.
+    const ctype = res.headers.get('content-type') || '';
+    if (!ctype.includes('json')) {
+      // No hay catálogo Calcpad en este deploy — silenciamos.
+      return;
+    }
+    const idx: CpdIndex = await res.json();
+    const sel = document.getElementById('cpd-select') as HTMLSelectElement | null;
+    if (!sel) return;
+    sel.options[0].text = `📚 Calcpad (${idx.total})`;
+    const sortedGroups = Object.keys(idx.groups).sort();
+    for (const groupName of sortedGroups) {
+      const og = document.createElement('optgroup');
+      og.label = groupName;
+      const items = idx.groups[groupName];
+      items.sort((a, b) => a.name.localeCompare(b.name));
+      for (const item of items) {
+        const opt = document.createElement('option');
+        opt.value = item.path;
+        opt.textContent = item.name;
+        og.appendChild(opt);
+      }
+      sel.appendChild(og);
+    }
+    console.log(`Loaded ${idx.total} Calcpad examples in ${sortedGroups.length} groups`);
+  } catch (err) {
+    // Silenciar — el catálogo Calcpad es opcional. Cualquier error de red o JSON
+    // simplemente significa que no hay catálogo disponible en este deploy.
+    console.debug('Calcpad index not available:', err);
+  }
+}
+
+document.getElementById('cpd-select')?.addEventListener('change', async (ev) => {
+  const sel = ev.target as HTMLSelectElement;
+  const path = sel.value;
+  if (!path) return;
+  try {
+    const baseUrl = (import.meta as any).env?.BASE_URL || '/';
+    const res = await fetch(baseUrl + 'calcpad-examples/' + path);
+    if (!res.ok) {
+      console.error(`Failed to load ${path}: HTTP ${res.status}`);
+      return;
+    }
+    const cpdText = await res.text();
+    // Convert .cpd to MATLAB-like comment + raw code so the user can read it
+    // Calcpad uses ' for comments, " for headings — keep them as comments
+    const lines = cpdText.split('\n');
+    const matlab = lines.map(l => {
+      const t = l.trimStart();
+      if (t.startsWith("'")) return '% ' + t.substring(1).trim();
+      if (t.startsWith('"')) return '% === ' + t.substring(1).trim() + ' ===';
+      return '% [calcpad] ' + l;
+    }).join('\n');
+    const header = `% ═══════════════════════════════════════════
+% Ejemplo Calcpad-Symbolic: ${path}
+% Mostrado como comentarios en HekatanLab.
+% Para ejecutar: usa Calcpad-Symbolic Web →
+% https://giorgioburbanelli89.github.io/calcpad-web/
+% ═══════════════════════════════════════════
+\n`;
+    setEditorText(header + matlab);
+    run();
+  } catch (err) {
+    console.error('Failed to load .cpd:', err);
+  }
+});
+
+loadCpdIndex();
