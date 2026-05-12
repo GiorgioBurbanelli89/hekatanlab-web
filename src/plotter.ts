@@ -144,9 +144,23 @@ function render3DScene(data: PlotData, W: number, H: number): HTMLDivElement {
   addGrid(scene, gridSize, center);
   addAxes(scene, gridSize * 0.4, center);
 
-  // Camera position (Z-up: camera offset in -Y so +Z is "up" on screen)
+  // Camera position: detectar si el surf es "plano" (typical FEM displacement
+  // field — el rango Z es mucho menor que el rango X/Y). En ese caso, usar
+  // vista top-down (igual a MATLAB `view(2)` automatico) — el usuario ve un
+  // contorno 2D limpio. Sino, usar perspectiva 3D estandar.
   const dist = gridSize * 1.8;
-  camera.position.set(center.x + dist * 0.7, center.y - dist * 0.7, center.z + dist * 0.5);
+  const xyExtent = Math.max(size.x, size.y);
+  const zExtent = size.z;
+  const isFlat = xyExtent > 0 && zExtent / xyExtent < 0.1;
+  if (isFlat) {
+    // Vista top-down (mirando hacia abajo desde +Z) — Y vertical en pantalla.
+    camera.position.set(center.x, center.y, center.z + dist * 1.2);
+    camera.up.set(0, 1, 0);            // Y arriba en la vista
+  } else {
+    // Vista 3D perspectiva con Z-up
+    camera.position.set(center.x + dist * 0.7, center.y - dist * 0.7, center.z + dist * 0.5);
+    camera.up.set(0, 0, 1);
+  }
   controls.target.copy(center);
   controls.update();
 

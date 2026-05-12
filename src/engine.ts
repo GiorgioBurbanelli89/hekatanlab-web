@@ -3117,6 +3117,28 @@ export function createEngine() {
         } else if (!loopSuppress) {
           // Expresión sin asignación: en MATLAB se asigna a `ans` y se muestra a menos que termine en ';'.
           // En modo estricto, lo mostramos como `ans = ...` (más fiel a MATLAB).
+          //
+          // Caso especial: MATLAB "command syntax" como `colorbar`, `hold`,
+          // `figure`, `clf` (un solo identificador que es funcion). En MATLAB
+          // real esto CALL al funcion sin args. Aqui math.js lo evalua como
+          // SymbolNode y devuelve la funcion misma. Para imitar MATLAB,
+          // detectamos function-valued result y lo invocamos (si no tiene args).
+          if (typeof result === 'function') {
+            try {
+              const called = result();
+              // Si el resultado es null/undefined (stub), no mostramos nada (MATLAB tampoco).
+              if (called == null) return;
+              // Sino, mostramos el resultado de la llamada como ans
+              if (strict && !suppress) {
+                try { parser.set('ans', called); } catch {}
+                results.push({
+                  line: startLine + 1, input: rawText, type: 'assign',
+                  varName: 'ans', value: called, formatted: formatValue(called),
+                });
+              }
+            } catch { /* la funcion fallo - igual no mostrar */ }
+            return;
+          }
           if (strict && !suppress) {
             try { parser.set('ans', result); } catch {}
             results.push({
