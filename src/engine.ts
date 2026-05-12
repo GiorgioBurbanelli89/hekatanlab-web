@@ -3196,11 +3196,17 @@ export function createEngine() {
           //   a=1, b=2   → ambos visibles
           //   a=1, b=2;  → a visible, b oculto
           // El último stmt usa el separador que tenía (o `false` si la línea no terminaba en `;`).
+          //
+          // IMPORTANTE: detectar `%` (inline comment) fuera de strings/parens —
+          // todo lo que sigue es comentario y NO debe ser split-eado por `,` o `;`.
+          // Sin esto, comentarios con coma como `% u, v por nodo` rompian el parser.
           const subStmts: { text: string; hadSemi: boolean }[] = [];
           { let depth = 0, inStr = false, cur = '';
             for (const ch of trimmed) {
               if (ch === '"' || ch === "'") inStr = !inStr;
               if (!inStr) { if (ch === '(' || ch === '[') depth++; else if (ch === ')' || ch === ']') depth--; }
+              // Si encontramos `%` fuera de string/parens, todo lo que sigue es comentario MATLAB → STOP
+              if (ch === '%' && depth === 0 && !inStr) break;
               if ((ch === ';' || ch === ',') && depth === 0 && !inStr) {
                 if (cur.trim()) subStmts.push({ text: cur.trim(), hadSemi: ch === ';' });
                 cur = '';
