@@ -115,7 +115,7 @@ for run = 1:N_FEM_RUNS
   end
 
   % 2. BCs: penalty en base (y=0)
-  kp = 1e20;
+  kp = 1e10;
   for i = 1:(nx_e+1)
     K_g(2*i-1, 2*i-1) = K_g(2*i-1, 2*i-1) + kp;
     K_g(2*i, 2*i) = K_g(2*i, 2*i) + kp;
@@ -360,7 +360,7 @@ for e = 1:ne
 end
 
 % --- BCs: penalizacion en nodos de la base (y=0) ---
-kp = 1e20;
+kp = 1e10;
 for i = 1:(nx+1)
   j = 2*i - 1;
   K(j, j) = K(j, j) + kp;
@@ -705,7 +705,7 @@ for e = 1:ne_m
 end
 
 % --- BCs: simply supported en los 4 bordes (w=0) ---
-kp = 1e20;
+kp = 1e10;
 for k = 1:nj_m
   x = nds_m(k,1); y = nds_m(k,2);
   if abs(x) < 1e-9 || abs(x - W_m) < 1e-9 || abs(y) < 1e-9 || abs(y - H_m) < 1e-9
@@ -912,7 +912,7 @@ for e = 1:ne_m
     end
   end
 end
-kp = 1e20;
+kp = 1e10;
 for k = 1:nj_m
   x = nds_m(k,1); y = nds_m(k,2);
   if abs(x)<1e-9 || abs(x-W_m)<1e-9 || abs(y)<1e-9 || abs(y-H_m)<1e-9
@@ -1155,7 +1155,7 @@ for e = 1:ne_m
 end
 
 % BCs: empotrado en x=0
-kp = 1e20;
+kp = 1e10;
 for k = 1:nj_m
   if abs(nds_m(k,1)) < 1e-9
     for d = 1:5
@@ -1363,7 +1363,7 @@ for e = 1:ne_m
     end
   end
 end
-kp = 1e20;
+kp = 1e10;
 for k = 1:nj_m
   if abs(nds_m(k,1)) < 1e-9
     for d = 1:5
